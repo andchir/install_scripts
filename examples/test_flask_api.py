@@ -56,9 +56,19 @@ class TestFlaskAPI(unittest.TestCase):
         response = self.client.get('/api/scripts_list')
         data = response.get_json()
         script_names = [s['name'] for s in data['scripts']]
-        # Check that our installation scripts are present
-        self.assertIn('various-useful-api-django.sh', script_names)
-        self.assertIn('install-scripts-api-flask.sh', script_names)
+        # Check that our installation scripts are present (without extensions)
+        self.assertIn('various-useful-api-django', script_names)
+        self.assertIn('install-scripts-api-flask', script_names)
+
+    def test_scripts_list_names_without_extension(self):
+        """Test that script names are returned without file extensions."""
+        response = self.client.get('/api/scripts_list')
+        data = response.get_json()
+        script_names = [s['name'] for s in data['scripts']]
+        # Verify that no script names contain file extensions
+        for name in script_names:
+            self.assertNotIn('.sh', name, f"Script name '{name}' should not contain extension")
+            self.assertNotIn('.', name, f"Script name '{name}' should not contain extension")
 
 
 if __name__ == '__main__':

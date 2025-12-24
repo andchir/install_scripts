@@ -34,8 +34,10 @@ def scripts_list():
         for filename in os.listdir(SCRIPTS_DIR):
             filepath = os.path.join(SCRIPTS_DIR, filename)
             if os.path.isfile(filepath):
+                # Remove file extension from the name
+                name_without_ext = os.path.splitext(filename)[0]
                 scripts.append({
-                    'name': filename,
+                    'name': name_without_ext,
                     'size': os.path.getsize(filepath),
                     'path': filepath
                 })
