@@ -107,9 +107,10 @@ def strip_ansi_codes(text: Optional[str]) -> Optional[str]:
     - Cursor movement codes
     - Screen clear codes
     - Other terminal control sequences
+    - Caret notation escape sequences (^[[0;36m, ^[[0m, etc.)
 
     Also removes non-printable control characters:
-    - NULL characters (\\x00)
+    - NULL characters (\\x00) and caret notation (^@)
     - Other control characters (\\x01-\\x08, \\x0b, \\x0c, \\x0e-\\x1f, \\x7f)
     - Preserves common whitespace: tab (\\x09), newline (\\x0a), carriage return (\\x0d)
 
@@ -144,6 +145,29 @@ def strip_ansi_codes(text: Optional[str]) -> Optional[str]:
         r')'
     )
     result = ansi_pattern.sub('', text)
+
+    # Strip caret notation for ANSI escape sequences
+    # Some terminals output ^[ instead of actual ESC character (\x1b)
+    # Pattern matches: ^[[0;36m, ^[[1;37m, ^[[0m, ^[[H, ^[[J, etc.
+    # Also handles \^[ which appears in some JSON-escaped outputs
+    caret_ansi_pattern = re.compile(
+        r'\\?\^'          # Optional backslash followed by caret (^ or \^)
+        r'\['             # Literal [
+        r'\['             # Literal [ (CSI introducer)
+        r'[0-9;]*'        # Optional numeric parameters
+        r'[A-Za-z]?'      # Optional command character
+    )
+    result = caret_ansi_pattern.sub('', result)
+
+    # Strip caret notation for control characters (^@, ^A, ^B, etc.)
+    # ^@ = NUL (0x00), ^A = SOH (0x01), ... ^Z = SUB (0x1A), ^[ = ESC, etc.
+    # Also handles \^@ which appears in some JSON-escaped outputs
+    # We keep ^I (tab), ^J (newline), ^M (carriage return) - but these rarely appear as caret notation
+    caret_control_pattern = re.compile(
+        r'\\?\^'          # Optional backslash followed by caret
+        r'[@A-HK-LN-Z\[\\\]^_?]'  # Control chars except I, J, M (tab, newline, CR)
+    )
+    result = caret_control_pattern.sub('', result)
 
     # Also strip NULL characters and other non-printable control characters
     # except for common whitespace (tab, newline, carriage return)
