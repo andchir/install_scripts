@@ -93,6 +93,74 @@ def scripts_list():
         }), 500
 
 
+@app.route('/api/script/<script_name>', methods=['GET'])
+def get_script(script_name):
+    """
+    Get information about a single script by its script_name.
+
+    URL Parameters:
+        script_name: The script_name to look up (e.g., 'various-useful-api-django')
+
+    Query Parameters:
+        lang: Language code for the data file (default: 'ru')
+              Falls back to 'ru' if the requested language file doesn't exist.
+
+    Returns:
+        JSON response with script details if found, or 404 if not found.
+    """
+    try:
+        # Get language from query parameter, default to 'ru'
+        lang = request.args.get('lang', DEFAULT_LANG)
+
+        # Get the appropriate data file path
+        data_file_path = get_data_file_path(lang)
+
+        if not os.path.exists(data_file_path):
+            return jsonify({
+                'success': False,
+                'error': 'Data file not found',
+                'script': None
+            }), 404
+
+        # Load scripts from the data file
+        with open(data_file_path, 'r', encoding='utf-8') as f:
+            scripts = json.load(f)
+
+        # Find the script by script_name
+        for script in scripts:
+            if script.get('script_name') == script_name:
+                return jsonify({
+                    'success': True,
+                    'script': script
+                })
+
+        # Script not found
+        return jsonify({
+            'success': False,
+            'error': f'Script with script_name "{script_name}" not found',
+            'script': None
+        }), 404
+
+    except json.JSONDecodeError as e:
+        return jsonify({
+            'success': False,
+            'error': f'Invalid JSON format in data file: {str(e)}',
+            'script': None
+        }), 500
+    except PermissionError:
+        return jsonify({
+            'success': False,
+            'error': 'Permission denied accessing data file',
+            'script': None
+        }), 403
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'script': None
+        }), 500
+
+
 @app.route('/health', methods=['GET'])
 def health():
     """
@@ -121,7 +189,8 @@ def index():
         'endpoints': {
             '/': 'API information (this page)',
             '/health': 'Health check endpoint',
-            '/api/scripts_list': 'List all available installation scripts (supports ?lang=ru|en)'
+            '/api/scripts_list': 'List all available installation scripts (supports ?lang=ru|en)',
+            '/api/script/<script_name>': 'Get information about a single script by script_name (supports ?lang=ru|en)'
         }
     })
 

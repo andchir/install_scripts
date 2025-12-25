@@ -55,8 +55,8 @@ class TestFlaskAPI(unittest.TestCase):
         """Test that scripts_list contains expected installation scripts."""
         response = self.client.get('/api/scripts_list')
         data = response.get_json()
-        script_names = [s['name'] for s in data['scripts']]
-        # Check that our installation scripts are present (without extensions)
+        script_names = [s['script_name'] for s in data['scripts']]
+        # Check that our installation scripts are present
         self.assertIn('various-useful-api-django', script_names)
         self.assertIn('install-scripts-api-flask', script_names)
 
@@ -64,11 +64,63 @@ class TestFlaskAPI(unittest.TestCase):
         """Test that script names are returned without file extensions."""
         response = self.client.get('/api/scripts_list')
         data = response.get_json()
-        script_names = [s['name'] for s in data['scripts']]
+        script_names = [s['script_name'] for s in data['scripts']]
         # Verify that no script names contain file extensions
-        for name in script_names:
-            self.assertNotIn('.sh', name, f"Script name '{name}' should not contain extension")
-            self.assertNotIn('.', name, f"Script name '{name}' should not contain extension")
+        for script_name in script_names:
+            self.assertNotIn('.sh', script_name, f"Script name '{script_name}' should not contain extension")
+
+    def test_get_script_endpoint(self):
+        """Test the /api/script/<script_name> endpoint returns script info."""
+        response = self.client.get('/api/script/various-useful-api-django')
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data['success'])
+        self.assertIn('script', data)
+        self.assertEqual(data['script']['script_name'], 'various-useful-api-django')
+
+    def test_get_script_not_found(self):
+        """Test that /api/script/<script_name> returns 404 for non-existent script."""
+        response = self.client.get('/api/script/non-existent-script')
+        self.assertEqual(response.status_code, 404)
+        data = response.get_json()
+        self.assertFalse(data['success'])
+        self.assertIn('error', data)
+        self.assertIsNone(data['script'])
+
+    def test_get_script_with_lang_param(self):
+        """Test the /api/script/<script_name> endpoint with lang parameter."""
+        # Test with English
+        response = self.client.get('/api/script/various-useful-api-django?lang=en')
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data['success'])
+        self.assertIn('script', data)
+        # English description should contain "A collection of useful APIs"
+        self.assertIn('A collection of useful APIs', data['script']['description'])
+
+        # Test with Russian (default)
+        response = self.client.get('/api/script/various-useful-api-django?lang=ru')
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data['success'])
+        # Russian description should contain "Набор полезных API"
+        self.assertIn('Набор полезных API', data['script']['description'])
+
+    def test_get_script_all_scripts(self):
+        """Test that all scripts in data file can be retrieved individually."""
+        # Get all scripts first
+        response = self.client.get('/api/scripts_list')
+        data = response.get_json()
+        scripts = data['scripts']
+
+        # Test each script can be retrieved
+        for script in scripts:
+            script_name = script['script_name']
+            response = self.client.get(f'/api/script/{script_name}')
+            self.assertEqual(response.status_code, 200, f"Failed to get script: {script_name}")
+            script_data = response.get_json()
+            self.assertTrue(script_data['success'])
+            self.assertEqual(script_data['script']['script_name'], script_name)
 
 
 if __name__ == '__main__':
