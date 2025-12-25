@@ -119,7 +119,7 @@ def get_script(script_name):
             return jsonify({
                 'success': False,
                 'error': 'Data file not found',
-                'script': None
+                'result': None
             }), 404
 
         # Load scripts from the data file
@@ -131,33 +131,33 @@ def get_script(script_name):
             if script.get('script_name') == script_name:
                 return jsonify({
                     'success': True,
-                    'script': script
+                    'result': script
                 })
 
         # Script not found
         return jsonify({
             'success': False,
             'error': f'Script with script_name "{script_name}" not found',
-            'script': None
+            'result': None
         }), 404
 
     except json.JSONDecodeError as e:
         return jsonify({
             'success': False,
             'error': f'Invalid JSON format in data file: {str(e)}',
-            'script': None
+            'result': None
         }), 500
     except PermissionError:
         return jsonify({
             'success': False,
             'error': 'Permission denied accessing data file',
-            'script': None
+            'result': None
         }), 403
     except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e),
-            'script': None
+            'result': None
         }), 500
 
 

@@ -75,8 +75,8 @@ class TestFlaskAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertTrue(data['success'])
-        self.assertIn('script', data)
-        self.assertEqual(data['script']['script_name'], 'various-useful-api-django')
+        self.assertIn('result', data)
+        self.assertEqual(data['result']['script_name'], 'various-useful-api-django')
 
     def test_get_script_not_found(self):
         """Test that /api/script/<script_name> returns 404 for non-existent script."""
@@ -85,7 +85,7 @@ class TestFlaskAPI(unittest.TestCase):
         data = response.get_json()
         self.assertFalse(data['success'])
         self.assertIn('error', data)
-        self.assertIsNone(data['script'])
+        self.assertIsNone(data['result'])
 
     def test_get_script_with_lang_param(self):
         """Test the /api/script/<script_name> endpoint with lang parameter."""
@@ -94,9 +94,9 @@ class TestFlaskAPI(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertTrue(data['success'])
-        self.assertIn('script', data)
+        self.assertIn('result', data)
         # English description should contain "A collection of useful APIs"
-        self.assertIn('A collection of useful APIs', data['script']['description'])
+        self.assertIn('A collection of useful APIs', data['result']['description'])
 
         # Test with Russian (default)
         response = self.client.get('/api/script/various-useful-api-django?lang=ru')
@@ -104,7 +104,7 @@ class TestFlaskAPI(unittest.TestCase):
         data = response.get_json()
         self.assertTrue(data['success'])
         # Russian description should contain "Набор полезных API"
-        self.assertIn('Набор полезных API', data['script']['description'])
+        self.assertIn('Набор полезных API', data['result']['description'])
 
     def test_get_script_all_scripts(self):
         """Test that all scripts in data file can be retrieved individually."""
@@ -120,7 +120,7 @@ class TestFlaskAPI(unittest.TestCase):
             self.assertEqual(response.status_code, 200, f"Failed to get script: {script_name}")
             script_data = response.get_json()
             self.assertTrue(script_data['success'])
-            self.assertEqual(script_data['script']['script_name'], script_name)
+            self.assertEqual(script_data['result']['script_name'], script_name)
 
 
 if __name__ == '__main__':
