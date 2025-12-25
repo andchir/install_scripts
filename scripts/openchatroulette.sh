@@ -365,10 +365,20 @@ EOF
     systemctl daemon-reload
     print_success "Systemd daemon reloaded"
 
-    print_step "Enabling and starting service..."
+    print_step "Enabling service..."
     systemctl enable ${SERVICE_NAME}.service > /dev/null 2>&1
-    systemctl start ${SERVICE_NAME}.service
-    print_success "Service enabled and started"
+    print_success "Service enabled"
+
+    # Check if service already exists and is active, then restart; otherwise start
+    if systemctl is-active --quiet ${SERVICE_NAME}.service; then
+        print_step "Service already running, restarting..."
+        systemctl restart ${SERVICE_NAME}.service
+        print_success "Service restarted"
+    else
+        print_step "Starting service..."
+        systemctl start ${SERVICE_NAME}.service
+        print_success "Service started"
+    fi
 }
 
 configure_nginx() {
