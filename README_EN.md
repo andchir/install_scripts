@@ -23,6 +23,7 @@ This project provides a set of bash scripts for quick deployment of popular soft
 | `mysql-phpmyadmin.sh` | MySQL database server with phpMyAdmin web interface |
 | `postgresql-mathesar.sh` | PostgreSQL database server with Mathesar web interface |
 | `filebrowser.sh` | Web file manager with modern interface and advanced features |
+| `wireguard-wireguard-ui.sh` | WireGuard VPN server with WireGuard-UI web management interface |
 
 ## Usage
 

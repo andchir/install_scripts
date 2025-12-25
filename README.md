@@ -23,6 +23,7 @@
 | `mysql-phpmyadmin.sh` | Сервер базы данных MySQL с веб-интерфейсом phpMyAdmin |
 | `postgresql-mathesar.sh` | Сервер базы данных PostgreSQL с веб-интерфейсом Mathesar |
 | `filebrowser.sh` | Веб-файловый менеджер с современным интерфейсом и расширенными возможностями |
+| `wireguard-wireguard-ui.sh` | VPN-сервер WireGuard с веб-интерфейсом WireGuard-UI для управления |
 
 ## Использование
 
