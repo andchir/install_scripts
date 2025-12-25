@@ -43,6 +43,9 @@ gunicorn-errors.txt
 *.db
 rate_limiter.db
 
+# Task files
+api/tasks/
+
 # OS
 .DS_Store
 Thumbs.db
