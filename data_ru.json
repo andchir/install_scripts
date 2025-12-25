@@ -8,7 +8,7 @@
     {
       "name": "andchir/various-useful-api-django",
       "script_name": "various-useful-api-django",
-      "description": "Набор полезных API с использованием Dkango",
+      "description": "Набор полезных API с использованием Django",
       "info": "Необходимый параметр: доменное имя"
     },
   {
