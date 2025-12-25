@@ -36,9 +36,9 @@
     "info": "Необходимый параметр: доменное имя"
   },
   {
-    "name": "ngoduykhanh/wireguard-ui",
-    "script_name": "wireguard-wireguard-ui",
-    "description": "VPN-сервер WireGuard с веб-интерфейсом WireGuard-UI для управления",
+    "name": "gtsteffaniak/filebrowser",
+    "script_name": "filebrowser",
+    "description": "Веб-файловый менеджер с современным интерфейсом и расширенными возможностями",
     "info": "Необходимый параметр: доменное имя"
   }
 ]

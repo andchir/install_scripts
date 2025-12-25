@@ -36,9 +36,9 @@
     "info": "Required parameter: domain name"
   },
   {
-    "name": "ngoduykhanh/wireguard-ui",
-    "script_name": "wireguard-wireguard-ui",
-    "description": "WireGuard VPN server with WireGuard-UI web management interface",
+    "name": "gtsteffaniak/filebrowser",
+    "script_name": "filebrowser",
+    "description": "Web file manager with modern interface and advanced features",
     "info": "Required parameter: domain name"
   }
 ]
