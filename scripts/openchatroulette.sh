@@ -230,6 +230,9 @@ clone_repository() {
 
     if [[ -d "$INSTALL_DIR/.git" ]]; then
         print_info "Repository already exists at $INSTALL_DIR"
+        print_step "Discarding local changes..."
+        su - "$CURRENT_USER" -c "cd '$INSTALL_DIR' && git checkout ." > /dev/null 2>&1
+        print_success "Local changes discarded"
         print_step "Pulling latest updates..."
         su - "$CURRENT_USER" -c "cd '$INSTALL_DIR' && git pull" > /dev/null 2>&1
         print_success "Repository updated successfully"
