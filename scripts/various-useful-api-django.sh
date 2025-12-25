@@ -415,9 +415,16 @@ EOF
     systemctl start ${SERVICE_NAME}.socket
     print_success "Socket enabled and started"
 
-    print_step "Starting service..."
-    systemctl start ${SERVICE_NAME}.service
-    print_success "Service started"
+    # Check if service already exists and is active, then restart; otherwise start
+    if systemctl is-active --quiet ${SERVICE_NAME}.service; then
+        print_step "Service already running, restarting..."
+        systemctl restart ${SERVICE_NAME}.service
+        print_success "Service restarted"
+    else
+        print_step "Starting service..."
+        systemctl start ${SERVICE_NAME}.service
+        print_success "Service started"
+    fi
 }
 
 configure_nginx() {
