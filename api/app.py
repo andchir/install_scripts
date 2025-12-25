@@ -110,6 +110,7 @@ def get_data_file_path(lang):
 
 
 @app.route('/api/scripts_list', methods=['GET'])
+@require_api_key
 def scripts_list():
     """
     List all scripts from the data file.
@@ -166,6 +167,7 @@ def scripts_list():
 
 
 @app.route('/api/script/<script_name>', methods=['GET'])
+@require_api_key
 def get_script(script_name):
     """
     Get information about a single script by its script_name.
@@ -426,6 +428,7 @@ def install():
 
 
 @app.route('/health', methods=['GET'])
+@require_api_key
 def health():
     """
     Health check endpoint.
@@ -440,6 +443,7 @@ def health():
 
 
 @app.route('/', methods=['GET'])
+@require_api_key
 def index():
     """
     Root endpoint with API information.
