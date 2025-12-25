@@ -15,7 +15,12 @@ from unittest.mock import patch, MagicMock
 # Add the api directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'api'))
 
-from app import app, parse_args, execute_script_via_ssh, SSH_AVAILABLE
+from app import (
+    app, parse_args, execute_script_via_ssh, SSH_AVAILABLE,
+    generate_task_id, get_task_file_path, write_task_status, read_task_status,
+    delete_task_file, TASK_STATUS_PROCESSING, TASK_STATUS_COMPLETED, TASK_STATUS_ERROR,
+    TASKS_DIR
+)
 
 
 class TestParseArgs(unittest.TestCase):
@@ -199,6 +204,15 @@ class TestInstallEndpoint(unittest.TestCase):
         self.app.config['TESTING'] = True
         self.client = self.app.test_client()
 
+    def tearDown(self):
+        """Clean up any task files created during tests."""
+        import glob
+        for f in glob.glob(os.path.join(TASKS_DIR, '*.txt')):
+            try:
+                os.remove(f)
+            except:
+                pass
+
     def test_install_endpoint_missing_body(self):
         """Test that /api/install returns 400 when no JSON body is provided."""
         response = self.client.post('/api/install', content_type='application/json')
@@ -257,7 +271,7 @@ class TestInstallEndpoint(unittest.TestCase):
 
     def test_install_endpoint_valid_script_name_formats(self):
         """Test that script_name validation accepts valid formats."""
-        # These should all pass validation and fail at SSH stage
+        # These should all pass validation and return a task_id
         valid_names = ['test', 'test-script', 'test_script', 'script123']
         for name in valid_names:
             response = self.client.post('/api/install',
@@ -272,92 +286,47 @@ class TestInstallEndpoint(unittest.TestCase):
             if response.status_code == 400:
                 self.assertNotIn('Invalid script_name format', data.get('error', ''))
 
-    @unittest.skipIf(not SSH_AVAILABLE, "paramiko not installed")
-    @patch('app.paramiko.SSHClient')
-    def test_install_endpoint_ssh_success(self, mock_ssh_class):
-        """Test successful script execution via SSH."""
-        # Mock SSH client
-        mock_ssh = MagicMock()
-        mock_ssh_class.return_value = mock_ssh
-
-        # Mock stdout and stderr
-        mock_stdout = MagicMock()
-        mock_stdout.read.return_value = b'Script executed successfully'
-        mock_stdout.channel.recv_exit_status.return_value = 0
-
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b''
-
-        mock_ssh.exec_command.return_value = (MagicMock(), mock_stdout, mock_stderr)
-
+    def test_install_endpoint_returns_task_id(self):
+        """Test that /api/install returns a task_id for valid requests."""
         response = self.client.post('/api/install',
                                     data=json.dumps({
-                                        'script_name': 'pocketbase',
+                                        'script_name': 'test-script',
                                         'server_ip': '192.168.1.1',
-                                        'server_root_password': 'testpassword',
-                                        'additional': 'example.com'
+                                        'server_root_password': 'password'
                                     }),
                                     content_type='application/json')
-
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertTrue(data['success'])
-        self.assertIn('Script executed successfully', data['output'])
+        self.assertIn('task_id', data)
+        self.assertIsNotNone(data['task_id'])
+        # Verify task_id is a valid MD5 hash (32 hex characters)
+        self.assertRegex(data['task_id'], r'^[a-f0-9]{32}$')
 
-    @unittest.skipIf(not SSH_AVAILABLE, "paramiko not installed")
-    @patch('app.paramiko.SSHClient')
-    def test_install_endpoint_ssh_failure(self, mock_ssh_class):
-        """Test failed script execution via SSH."""
-        # Mock SSH client
-        mock_ssh = MagicMock()
-        mock_ssh_class.return_value = mock_ssh
+    def test_install_endpoint_same_params_same_task_id(self):
+        """Test that the same parameters generate the same task_id."""
+        params = {
+            'script_name': 'test-script',
+            'server_ip': '192.168.1.1',
+            'server_root_password': 'password',
+            'additional': 'extra'
+        }
 
-        # Mock stdout and stderr with failure
-        mock_stdout = MagicMock()
-        mock_stdout.read.return_value = b'Error occurred'
-        mock_stdout.channel.recv_exit_status.return_value = 1
+        response1 = self.client.post('/api/install',
+                                     data=json.dumps(params),
+                                     content_type='application/json')
+        data1 = response1.get_json()
 
-        mock_stderr = MagicMock()
-        mock_stderr.read.return_value = b'Script failed'
+        # Clear the task file to allow another request with same params
+        if data1.get('task_id'):
+            delete_task_file(data1['task_id'])
 
-        mock_ssh.exec_command.return_value = (MagicMock(), mock_stdout, mock_stderr)
+        response2 = self.client.post('/api/install',
+                                     data=json.dumps(params),
+                                     content_type='application/json')
+        data2 = response2.get_json()
 
-        response = self.client.post('/api/install',
-                                    data=json.dumps({
-                                        'script_name': 'pocketbase',
-                                        'server_ip': '192.168.1.1',
-                                        'server_root_password': 'testpassword'
-                                    }),
-                                    content_type='application/json')
-
-        self.assertEqual(response.status_code, 500)
-        data = response.get_json()
-        self.assertFalse(data['success'])
-        self.assertIn('exited with status', data['error'])
-
-    @unittest.skipIf(not SSH_AVAILABLE, "paramiko not installed")
-    @patch('app.paramiko.SSHClient')
-    def test_install_endpoint_ssh_auth_failure(self, mock_ssh_class):
-        """Test SSH authentication failure."""
-        import paramiko
-
-        # Mock SSH client to raise AuthenticationException
-        mock_ssh = MagicMock()
-        mock_ssh_class.return_value = mock_ssh
-        mock_ssh.connect.side_effect = paramiko.AuthenticationException('Authentication failed')
-
-        response = self.client.post('/api/install',
-                                    data=json.dumps({
-                                        'script_name': 'pocketbase',
-                                        'server_ip': '192.168.1.1',
-                                        'server_root_password': 'wrongpassword'
-                                    }),
-                                    content_type='application/json')
-
-        self.assertEqual(response.status_code, 500)
-        data = response.get_json()
-        self.assertFalse(data['success'])
-        self.assertIn('authentication failed', data['error'].lower())
+        self.assertEqual(data1['task_id'], data2['task_id'])
 
 
 class TestExecuteScriptViaSSH(unittest.TestCase):
@@ -452,6 +421,165 @@ class TestIndexEndpointWithInstall(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         data = response.get_json()
         self.assertIn('/api/install', data['endpoints'])
+
+    def test_index_includes_status_endpoint(self):
+        """Test that the root endpoint lists the /api/status/<task_id> endpoint."""
+        response = self.client.get('/')
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIn('/api/status/<task_id>', data['endpoints'])
+
+
+class TestTaskHelperFunctions(unittest.TestCase):
+    """Test cases for task helper functions."""
+
+    def setUp(self):
+        """Ensure tasks directory exists."""
+        os.makedirs(TASKS_DIR, exist_ok=True)
+        self.test_task_id = 'test_task_123456789abcdef0'
+
+    def tearDown(self):
+        """Clean up test task files."""
+        task_file = get_task_file_path(self.test_task_id)
+        if os.path.exists(task_file):
+            os.remove(task_file)
+
+    def test_generate_task_id_consistency(self):
+        """Test that generate_task_id produces consistent results."""
+        task_id1 = generate_task_id('script', '192.168.1.1', 'password', 'extra')
+        task_id2 = generate_task_id('script', '192.168.1.1', 'password', 'extra')
+        self.assertEqual(task_id1, task_id2)
+
+    def test_generate_task_id_uniqueness(self):
+        """Test that different parameters produce different task IDs."""
+        task_id1 = generate_task_id('script1', '192.168.1.1', 'password', 'extra')
+        task_id2 = generate_task_id('script2', '192.168.1.1', 'password', 'extra')
+        self.assertNotEqual(task_id1, task_id2)
+
+    def test_generate_task_id_format(self):
+        """Test that task ID is a valid MD5 hash format."""
+        task_id = generate_task_id('script', '192.168.1.1', 'password', 'extra')
+        self.assertRegex(task_id, r'^[a-f0-9]{32}$')
+
+    def test_get_task_file_path(self):
+        """Test that get_task_file_path returns correct path."""
+        path = get_task_file_path('abc123')
+        self.assertTrue(path.endswith('abc123.txt'))
+        self.assertIn(TASKS_DIR, path)
+
+    def test_write_and_read_task_status(self):
+        """Test writing and reading task status."""
+        write_task_status(self.test_task_id, TASK_STATUS_PROCESSING, 'Test content')
+        status, content = read_task_status(self.test_task_id)
+        self.assertEqual(status, TASK_STATUS_PROCESSING)
+        self.assertEqual(content, 'Test content')
+
+    def test_read_task_status_not_found(self):
+        """Test reading non-existent task returns None."""
+        status, content = read_task_status('non_existent_task')
+        self.assertIsNone(status)
+        self.assertIsNone(content)
+
+    def test_delete_task_file(self):
+        """Test deleting task file."""
+        write_task_status(self.test_task_id, TASK_STATUS_COMPLETED, 'Done')
+        task_file = get_task_file_path(self.test_task_id)
+        self.assertTrue(os.path.exists(task_file))
+
+        delete_task_file(self.test_task_id)
+        self.assertFalse(os.path.exists(task_file))
+
+    def test_delete_nonexistent_task_file(self):
+        """Test deleting non-existent task file doesn't raise error."""
+        # Should not raise any exception
+        delete_task_file('non_existent_task')
+
+
+class TestStatusEndpoint(unittest.TestCase):
+    """Test cases for the /api/status/<task_id> endpoint."""
+
+    def setUp(self):
+        """Set up test client."""
+        self.app = app
+        self.app.config['TESTING'] = True
+        self.client = self.app.test_client()
+        os.makedirs(TASKS_DIR, exist_ok=True)
+        self.test_task_id = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4'
+
+    def tearDown(self):
+        """Clean up test task files."""
+        task_file = get_task_file_path(self.test_task_id)
+        if os.path.exists(task_file):
+            os.remove(task_file)
+
+    def test_status_endpoint_invalid_task_id_format(self):
+        """Test that /api/status returns 400 for invalid task_id format."""
+        response = self.client.get('/api/status/invalid-task-id')
+        self.assertEqual(response.status_code, 400)
+        data = response.get_json()
+        self.assertFalse(data['success'])
+        self.assertIn('Invalid task_id format', data['error'])
+
+    def test_status_endpoint_task_not_found(self):
+        """Test that /api/status returns 404 for non-existent task."""
+        response = self.client.get('/api/status/a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4')
+        self.assertEqual(response.status_code, 404)
+        data = response.get_json()
+        self.assertFalse(data['success'])
+        self.assertIn('Task not found', data['error'])
+
+    def test_status_endpoint_processing_task(self):
+        """Test that /api/status returns correct status for processing task."""
+        write_task_status(self.test_task_id, TASK_STATUS_PROCESSING, 'Working...')
+        response = self.client.get(f'/api/status/{self.test_task_id}')
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['status'], TASK_STATUS_PROCESSING)
+        self.assertEqual(data['result'], 'Working...')
+
+        # Task file should still exist for processing status
+        self.assertTrue(os.path.exists(get_task_file_path(self.test_task_id)))
+
+    def test_status_endpoint_completed_task_and_cleanup(self):
+        """Test that /api/status returns correct status and cleans up completed task."""
+        write_task_status(self.test_task_id, TASK_STATUS_COMPLETED, 'All done!')
+        response = self.client.get(f'/api/status/{self.test_task_id}')
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['status'], TASK_STATUS_COMPLETED)
+        self.assertEqual(data['result'], 'All done!')
+
+        # Task file should be deleted after completed status is retrieved
+        self.assertFalse(os.path.exists(get_task_file_path(self.test_task_id)))
+
+    def test_status_endpoint_error_task_and_cleanup(self):
+        """Test that /api/status returns correct status and cleans up error task."""
+        write_task_status(self.test_task_id, TASK_STATUS_ERROR, 'Something went wrong')
+        response = self.client.get(f'/api/status/{self.test_task_id}')
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data['success'])
+        self.assertEqual(data['status'], TASK_STATUS_ERROR)
+        self.assertEqual(data['result'], 'Something went wrong')
+
+        # Task file should be deleted after error status is retrieved
+        self.assertFalse(os.path.exists(get_task_file_path(self.test_task_id)))
+
+    def test_status_endpoint_second_request_returns_not_found(self):
+        """Test that second request for completed task returns not found."""
+        write_task_status(self.test_task_id, TASK_STATUS_COMPLETED, 'Done')
+
+        # First request should succeed
+        response1 = self.client.get(f'/api/status/{self.test_task_id}')
+        self.assertEqual(response1.status_code, 200)
+
+        # Second request should return 404
+        response2 = self.client.get(f'/api/status/{self.test_task_id}')
+        self.assertEqual(response2.status_code, 404)
+        data = response2.get_json()
+        self.assertIn('Task not found', data['error'])
 
 
 if __name__ == '__main__':

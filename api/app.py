@@ -17,6 +17,8 @@ import re
 import json
 import argparse
 import logging
+import hashlib
+import threading
 from functools import wraps
 from flask import Flask, jsonify, request
 from dotenv import load_dotenv
@@ -43,6 +45,17 @@ SCRIPTS_BASE_URL = os.environ.get('SCRIPTS_BASE_URL', 'https://raw.githubusercon
 SSH_DEFAULT_PORT = 22
 SSH_DEFAULT_TIMEOUT = 30
 
+# Tasks directory for storing task reports
+TASKS_DIR = os.environ.get('TASKS_DIR', os.path.join(os.path.dirname(os.path.abspath(__file__)), 'tasks'))
+
+# Ensure tasks directory exists
+os.makedirs(TASKS_DIR, exist_ok=True)
+
+# Task status constants
+TASK_STATUS_PROCESSING = 'processing'
+TASK_STATUS_COMPLETED = 'completed'
+TASK_STATUS_ERROR = 'error'
+
 # API Key configuration
 API_KEY = os.environ.get('API_KEY', '')
 
@@ -65,6 +78,103 @@ rate_limiter = RateLimiter(
     time_window=RATE_LIMIT_TIME_WINDOW,
     enabled=PROTECTION_ENABLED
 )
+
+
+def generate_task_id(script_name, server_ip, server_root_password, additional=''):
+    """
+    Generate a unique task ID based on MD5 hash of all input parameters.
+
+    Args:
+        script_name: Name of the script to execute
+        server_ip: IP address of the remote server
+        server_root_password: Root password for SSH authentication
+        additional: Additional parameters to pass to the script
+
+    Returns:
+        str: MD5 hash string to be used as task_id
+    """
+    data = f"{script_name}:{server_ip}:{server_root_password}:{additional}"
+    return hashlib.md5(data.encode('utf-8')).hexdigest()
+
+
+def get_task_file_path(task_id):
+    """
+    Get the full path to the task report file.
+
+    Args:
+        task_id: The task ID
+
+    Returns:
+        str: Full path to the task report file
+    """
+    return os.path.join(TASKS_DIR, f"{task_id}.txt")
+
+
+def write_task_status(task_id, status, content=''):
+    """
+    Write task status and content to the task report file.
+
+    Args:
+        task_id: The task ID
+        status: Current status (processing, completed, error)
+        content: Content to append to the report
+    """
+    task_file = get_task_file_path(task_id)
+    with open(task_file, 'w', encoding='utf-8') as f:
+        f.write(f"STATUS:{status}\n")
+        f.write(content)
+
+
+def append_task_content(task_id, content):
+    """
+    Append content to the task report file without changing status.
+
+    Args:
+        task_id: The task ID
+        content: Content to append to the report
+    """
+    task_file = get_task_file_path(task_id)
+    with open(task_file, 'a', encoding='utf-8') as f:
+        f.write(content)
+
+
+def read_task_status(task_id):
+    """
+    Read the task status and content from the report file.
+
+    Args:
+        task_id: The task ID
+
+    Returns:
+        tuple: (status, content) or (None, None) if not found
+    """
+    task_file = get_task_file_path(task_id)
+    if not os.path.exists(task_file):
+        return None, None
+
+    with open(task_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+
+    # Parse status from the first line
+    lines = content.split('\n', 1)
+    if lines and lines[0].startswith('STATUS:'):
+        status = lines[0].replace('STATUS:', '').strip()
+        result_content = lines[1] if len(lines) > 1 else ''
+        return status, result_content
+
+    return None, None
+
+
+def delete_task_file(task_id):
+    """
+    Delete the task report file.
+
+    Args:
+        task_id: The task ID
+    """
+    task_file = get_task_file_path(task_id)
+    if os.path.exists(task_file):
+        os.remove(task_file)
 
 
 def require_api_key(f):
@@ -395,12 +505,120 @@ def execute_script_via_ssh(server_ip, server_root_password, script_name, additio
             ssh_client.close()
 
 
+def execute_script_via_ssh_async(task_id, server_ip, server_root_password, script_name, additional=None, port=SSH_DEFAULT_PORT):
+    """
+    Execute an installation script on a remote server via SSH in a background thread.
+
+    This function streams output to a task report file and updates the status
+    when the execution completes.
+
+    Args:
+        task_id: The task ID for tracking this execution
+        server_ip: IP address of the remote server
+        server_root_password: Root password for SSH authentication
+        script_name: Name of the script to execute (without .sh extension)
+        additional: Optional additional parameters to pass to the script
+        port: SSH port (default: 22)
+    """
+    if not SSH_AVAILABLE:
+        write_task_status(task_id, TASK_STATUS_ERROR, 'SSH library (paramiko) is not installed')
+        return
+
+    ssh_client = None
+    try:
+        # Create SSH client
+        ssh_client = paramiko.SSHClient()
+        ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+
+        logger.info(f"[Task {task_id}] Connecting to {server_ip}:{port} via SSH...")
+        append_task_content(task_id, f"Connecting to {server_ip}:{port} via SSH...\n")
+
+        # Connect to the server
+        ssh_client.connect(
+            hostname=server_ip,
+            port=port,
+            username='root',
+            password=server_root_password,
+            timeout=SSH_DEFAULT_TIMEOUT,
+            look_for_keys=False,
+            allow_agent=False
+        )
+
+        # Build the command to download and execute the script
+        script_url = f"{SCRIPTS_BASE_URL}/{script_name}.sh"
+
+        if additional:
+            escaped_additional = additional.replace("'", "'\"'\"'")
+            command = f"curl -fsSL -o- {script_url} | bash -s -- '{escaped_additional}'"
+        else:
+            command = f"curl -fsSL -o- {script_url} | bash"
+
+        logger.info(f"[Task {task_id}] Executing command: {command}")
+        append_task_content(task_id, f"Executing script: {script_name}\n")
+
+        # Execute the command
+        stdin, stdout, stderr = ssh_client.exec_command(command, get_pty=True)
+
+        # Stream output to the task file
+        output_buffer = []
+        while True:
+            line = stdout.readline()
+            if not line:
+                break
+            decoded_line = line if isinstance(line, str) else line.decode('utf-8', errors='replace')
+            output_buffer.append(decoded_line)
+            append_task_content(task_id, decoded_line)
+
+        # Read any remaining stderr
+        error_output = stderr.read().decode('utf-8', errors='replace')
+        if error_output:
+            append_task_content(task_id, f"\n{error_output}")
+
+        # Get exit status
+        exit_status = stdout.channel.recv_exit_status()
+
+        # Read current content and update status
+        _, current_content = read_task_status(task_id)
+
+        if exit_status != 0:
+            error_msg = f'\nScript exited with status {exit_status}'
+            write_task_status(task_id, TASK_STATUS_ERROR, (current_content or '') + error_msg)
+            logger.warning(f"[Task {task_id}] Installation failed with exit status {exit_status}")
+        else:
+            write_task_status(task_id, TASK_STATUS_COMPLETED, current_content or '')
+            logger.info(f"[Task {task_id}] Installation completed successfully")
+
+    except paramiko.AuthenticationException:
+        _, current_content = read_task_status(task_id)
+        error_msg = '\nSSH authentication failed. Please check the password.'
+        write_task_status(task_id, TASK_STATUS_ERROR, (current_content or '') + error_msg)
+        logger.error(f"[Task {task_id}] SSH authentication failed")
+    except paramiko.SSHException as e:
+        _, current_content = read_task_status(task_id)
+        error_msg = f'\nSSH connection error: {str(e)}'
+        write_task_status(task_id, TASK_STATUS_ERROR, (current_content or '') + error_msg)
+        logger.error(f"[Task {task_id}] SSH connection error: {str(e)}")
+    except TimeoutError:
+        _, current_content = read_task_status(task_id)
+        error_msg = f'\nConnection to {server_ip} timed out'
+        write_task_status(task_id, TASK_STATUS_ERROR, (current_content or '') + error_msg)
+        logger.error(f"[Task {task_id}] Connection timed out")
+    except Exception as e:
+        _, current_content = read_task_status(task_id)
+        error_msg = f'\nUnexpected error: {str(e)}'
+        write_task_status(task_id, TASK_STATUS_ERROR, (current_content or '') + error_msg)
+        logger.error(f"[Task {task_id}] Unexpected error: {str(e)}")
+    finally:
+        if ssh_client:
+            ssh_client.close()
+
+
 @app.route('/api/install', methods=['POST'])
 @require_api_key
 @check_rate_limit
 def install():
     """
-    Execute an installation script on a remote server via SSH.
+    Start an installation script on a remote server via SSH in a background thread.
 
     Requires API key authentication if API_KEY is set in environment.
 
@@ -412,8 +630,8 @@ def install():
 
     Returns:
         JSON response with:
-        - success: True if script executed successfully
-        - output: The script's output
+        - success: True if task was started successfully
+        - task_id: The task ID for tracking the installation status
         - error: Error message if something went wrong
     """
     # Check if SSH library is available
@@ -421,7 +639,7 @@ def install():
         return jsonify({
             'success': False,
             'error': 'SSH library (paramiko) is not installed. Please install it with: pip install paramiko',
-            'output': ''
+            'task_id': None
         }), 503
 
     try:
@@ -432,7 +650,7 @@ def install():
             return jsonify({
                 'success': False,
                 'error': 'Request body must be JSON',
-                'output': ''
+                'task_id': None
             }), 400
 
         # Validate required fields
@@ -443,7 +661,7 @@ def install():
             return jsonify({
                 'success': False,
                 'error': f'Missing required fields: {", ".join(missing_fields)}',
-                'output': ''
+                'task_id': None
             }), 400
 
         script_name = data['script_name']
@@ -456,7 +674,7 @@ def install():
             return jsonify({
                 'success': False,
                 'error': 'Invalid script_name format. Only alphanumeric characters, hyphens, and underscores are allowed.',
-                'output': ''
+                'task_id': None
             }), 400
 
         # Validate server_ip format (basic check)
@@ -465,39 +683,110 @@ def install():
             return jsonify({
                 'success': False,
                 'error': 'Invalid server_ip format. Please provide a valid IPv4 address.',
-                'output': ''
+                'task_id': None
             }), 400
 
-        # Execute the script via SSH
-        logger.info(f"Starting installation of '{script_name}' on {server_ip}")
-        success, output, error = execute_script_via_ssh(
-            server_ip=server_ip,
-            server_root_password=server_root_password,
-            script_name=script_name,
-            additional=additional
-        )
+        # Generate task ID based on all input parameters
+        task_id = generate_task_id(script_name, server_ip, server_root_password, additional)
 
-        if success:
-            logger.info(f"Installation of '{script_name}' on {server_ip} completed successfully")
+        # Check if a task with this ID already exists and is still processing
+        existing_status, _ = read_task_status(task_id)
+        if existing_status == TASK_STATUS_PROCESSING:
             return jsonify({
                 'success': True,
-                'output': output,
-                'error': None
+                'task_id': task_id,
+                'message': 'Task already in progress'
             })
-        else:
-            logger.warning(f"Installation of '{script_name}' on {server_ip} failed: {error}")
-            return jsonify({
-                'success': False,
-                'output': output,
-                'error': error
-            }), 500
+
+        # Create task file with initial processing status
+        write_task_status(task_id, TASK_STATUS_PROCESSING, f"Starting installation of '{script_name}' on {server_ip}...\n")
+
+        # Start the installation in a background thread
+        logger.info(f"Starting installation task {task_id} for '{script_name}' on {server_ip}")
+        thread = threading.Thread(
+            target=execute_script_via_ssh_async,
+            args=(task_id, server_ip, server_root_password, script_name, additional),
+            daemon=True
+        )
+        thread.start()
+
+        return jsonify({
+            'success': True,
+            'task_id': task_id,
+            'message': 'Installation started'
+        })
 
     except Exception as e:
         logger.error(f"Unexpected error in /api/install: {str(e)}")
         return jsonify({
             'success': False,
             'error': f'Unexpected error: {str(e)}',
-            'output': ''
+            'task_id': None
+        }), 500
+
+
+@app.route('/api/status/<task_id>', methods=['GET'])
+@require_api_key
+def get_task_status(task_id):
+    """
+    Get the status and output of an installation task.
+
+    Requires API key authentication if API_KEY is set in environment.
+
+    URL Parameters:
+        task_id: The task ID returned from /api/install endpoint
+
+    Returns:
+        JSON response with:
+        - success: True if task was found
+        - status: Current status (processing, completed, error)
+        - result: Current content of the report file
+        - error: Error message if task was not found
+
+    Note:
+        When a completed or error task is retrieved, the task file is deleted
+        and subsequent requests for the same task_id will return "Task not found".
+    """
+    try:
+        # Validate task_id format (should be MD5 hash - 32 hex characters)
+        if not task_id or not re.match(r'^[a-f0-9]{32}$', task_id):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid task_id format',
+                'status': None,
+                'result': None
+            }), 400
+
+        # Read task status and content
+        status, content = read_task_status(task_id)
+
+        if status is None:
+            return jsonify({
+                'success': False,
+                'error': 'Task not found',
+                'status': None,
+                'result': None
+            }), 404
+
+        response = {
+            'success': True,
+            'status': status,
+            'result': content
+        }
+
+        # If task is completed or has an error, delete the file after returning
+        if status in (TASK_STATUS_COMPLETED, TASK_STATUS_ERROR):
+            delete_task_file(task_id)
+
+        return jsonify(response)
+
+    except Exception as e:
+        logger.error(f"Unexpected error in /api/status/{task_id}: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': f'Unexpected error: {str(e)}',
+            'status': None,
+            'result': None
         }), 500
 
 
@@ -729,13 +1018,14 @@ def index():
     """
     return jsonify({
         'name': 'Install Scripts API',
-        'version': '1.1.0',
+        'version': '1.2.0',
         'endpoints': {
             '/': 'API information (this page)',
             '/health': 'Health check endpoint',
             '/api/scripts_list': 'List all available installation scripts (supports ?lang=ru|en)',
             '/api/script/<script_name>': 'Get information about a single script by script_name (supports ?lang=ru|en)',
-            '/api/install': 'Execute an installation script on a remote server via SSH (POST: script_name, server_ip, server_root_password, additional)',
+            '/api/install': 'Start an installation script in background (POST: script_name, server_ip, server_root_password, additional) - returns task_id',
+            '/api/status/<task_id>': 'Get installation task status and result (processing, completed, error)',
             '/api/protection/status': 'Get protection/rate limiting status and configuration',
             '/api/protection/blocked': 'List all currently blocked IP addresses',
             '/api/protection/block': 'Manually block an IP address (POST: ip, reason, permanent, duration_hours)',
