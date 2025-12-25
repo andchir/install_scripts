@@ -20,6 +20,7 @@
 | `various-useful-api-django.sh` | Набор полезных API с использованием Django |
 | `openchatroulette.sh` | Видео чат-рулетка |
 | `pocketbase.sh` | Бэкенд на Go с встроенной базой данных SQLite, аутентификацией, хранилищем файлов и админ-панелью |
+| `mysql-phpmyadmin.sh` | Сервер базы данных MySQL с веб-интерфейсом phpMyAdmin |
 
 ## Использование
 

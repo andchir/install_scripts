@@ -20,6 +20,7 @@ This project provides a set of bash scripts for quick deployment of popular soft
 | `various-useful-api-django.sh` | A collection of useful APIs using Django |
 | `openchatroulette.sh` | Video chat roulette |
 | `pocketbase.sh` | Go backend with built-in SQLite database, authentication, file storage and admin dashboard |
+| `mysql-phpmyadmin.sh` | MySQL database server with phpMyAdmin web interface |
 
 ## Usage
 
