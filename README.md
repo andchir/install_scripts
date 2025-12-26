@@ -25,6 +25,7 @@
 | `filebrowser.sh` | Веб-файловый менеджер с современным интерфейсом и расширенными возможностями |
 | `wireguard-wireguard-ui.sh` | VPN-сервер WireGuard с веб-интерфейсом WireGuard-UI для управления |
 | `xray-3x-ui.sh` | Xray прокси-сервер с веб-панелью 3x-ui для управления (поддержка VLESS, VMess, Trojan и других протоколов) |
+| `wordpress.sh` | CMS WordPress с MySQL, Nginx и SSL-сертификатом |
 
 ## Использование
 

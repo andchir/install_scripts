@@ -25,6 +25,7 @@ This project provides a set of bash scripts for quick deployment of popular soft
 | `filebrowser.sh` | Web file manager with modern interface and advanced features |
 | `wireguard-wireguard-ui.sh` | WireGuard VPN server with WireGuard-UI web management interface |
 | `xray-3x-ui.sh` | Xray proxy server with 3x-ui web panel for management (supports VLESS, VMess, Trojan and other protocols) |
+| `wordpress.sh` | WordPress CMS with MySQL, Nginx and SSL certificate |
 
 ## Usage
 
