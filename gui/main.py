@@ -26,7 +26,7 @@ from PyQt6.QtWidgets import (
     QGroupBox, QMessageBox, QSplitter, QFrame
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
-from PyQt6.QtGui import QFont, QIcon
+from PyQt6.QtGui import QFont, QIcon, QTextCursor
 
 # SSH imports
 try:
@@ -460,7 +460,7 @@ class MainWindow(QMainWindow):
 
     def on_output_received(self, text: str):
         """Handle output received from SSH."""
-        self.report_text.moveCursor(self.report_text.textCursor().End)
+        self.report_text.moveCursor(QTextCursor.MoveOperation.End)
         self.report_text.insertPlainText(text)
         # Auto-scroll to bottom
         scrollbar = self.report_text.verticalScrollBar()
