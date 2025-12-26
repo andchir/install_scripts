@@ -48,7 +48,7 @@
     "info": "Необходимый параметр: доменное имя"
   },
   {
-    "name": "MHSanaei/3x-ui",
+    "name": "mhsanaei/3x-ui",
     "script_name": "xray-3x-ui",
     "description": "Xray прокси-сервер с веб-панелью 3x-ui для управления (поддержка VLESS, VMess, Trojan и других протоколов)",
     "info": "Необходимый параметр: доменное имя"
