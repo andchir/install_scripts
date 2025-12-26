@@ -269,6 +269,67 @@ configure_mysql() {
         WP_ADMIN_PASSWORD=$(generate_password)
         WP_ADMIN_EMAIL="admin@$DOMAIN_NAME"
 
+        # Check if we can access MySQL without password
+        # This is needed when MySQL root user has password authentication enabled
+        MYSQL_ROOT_AUTH_PLUGIN=""
+        MYSQL_ACCESS_RESTORED=false
+
+        print_step "Checking MySQL root access..."
+        if mysql -u root -e "SELECT 1" > /dev/null 2>&1; then
+            print_success "MySQL root access available"
+        else
+            # MySQL root has password authentication enabled
+            # Temporarily switch to auth_socket to allow access without password
+            print_warning "MySQL root password is enabled. Temporarily enabling passwordless access..."
+
+            # Get current authentication plugin for root user
+            # We need to use mysqld --skip-grant-tables to access the database
+            print_step "Stopping MySQL service..."
+            systemctl stop mysql
+
+            print_step "Starting MySQL in recovery mode..."
+            # Start MySQL without grant tables (allows access without password)
+            mysqld_safe --skip-grant-tables --skip-networking &
+            MYSQLD_PID=$!
+            sleep 3
+
+            # Get the current authentication plugin
+            MYSQL_ROOT_AUTH_PLUGIN=$(mysql -u root -N -e "SELECT plugin FROM mysql.user WHERE user='root' AND host='localhost';" 2>/dev/null || echo "")
+
+            if [[ -z "$MYSQL_ROOT_AUTH_PLUGIN" ]]; then
+                MYSQL_ROOT_AUTH_PLUGIN="caching_sha2_password"
+            fi
+
+            print_info "Current root authentication plugin: $MYSQL_ROOT_AUTH_PLUGIN"
+
+            # Switch root to auth_socket temporarily
+            print_step "Switching root to auth_socket authentication..."
+            mysql -u root -e "UPDATE mysql.user SET plugin='auth_socket' WHERE user='root' AND host='localhost';"
+            mysql -u root -e "FLUSH PRIVILEGES;"
+
+            # Stop mysqld_safe
+            print_step "Restarting MySQL in normal mode..."
+            kill $MYSQLD_PID 2>/dev/null || true
+            sleep 2
+            # Make sure all MySQL processes are stopped
+            pkill -9 mysqld 2>/dev/null || true
+            sleep 1
+
+            # Start MySQL normally
+            systemctl start mysql
+            sleep 2
+
+            # Verify we can now connect
+            if mysql -u root -e "SELECT 1" > /dev/null 2>&1; then
+                print_success "MySQL root access temporarily enabled"
+                MYSQL_ACCESS_RESTORED=true
+            else
+                print_error "Failed to enable MySQL root access"
+                print_info "Please check MySQL configuration and try again"
+                exit 1
+            fi
+        fi
+
         print_step "Checking if database '$DB_NAME' exists..."
         if mysql -e "USE $DB_NAME" 2>/dev/null; then
             print_info "Database '$DB_NAME' already exists"
@@ -298,6 +359,14 @@ configure_mysql() {
         mysql -e "GRANT ALL PRIVILEGES ON $DB_NAME.* TO '$DB_USER'@'localhost';"
         mysql -e "FLUSH PRIVILEGES;"
         print_success "Database privileges granted"
+
+        # Restore original root authentication plugin if we changed it
+        if [[ "$MYSQL_ACCESS_RESTORED" == "true" ]] && [[ -n "$MYSQL_ROOT_AUTH_PLUGIN" ]]; then
+            print_step "Restoring original root authentication ($MYSQL_ROOT_AUTH_PLUGIN)..."
+            mysql -e "UPDATE mysql.user SET plugin='$MYSQL_ROOT_AUTH_PLUGIN' WHERE user='root' AND host='localhost';"
+            mysql -e "FLUSH PRIVILEGES;"
+            print_success "MySQL root authentication restored"
+        fi
 
         print_step "Saving WordPress credentials..."
         cat > "$WP_CREDENTIALS_FILE" << EOF
