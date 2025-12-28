@@ -76,5 +76,11 @@
     "script_name": "jitsi-meet",
     "description": "Jitsi Meet video conferencing platform. Installs: Prosody XMPP, Jitsi Videobridge, Jicofo, Nginx, Certbot",
     "info": "Required parameter: domain name"
+  },
+  {
+    "name": "netdata/netdata",
+    "script_name": "netdata",
+    "description": "Real-time server monitoring system Netdata. Installs: Netdata, Nginx, Certbot, basic authentication",
+    "info": "Required parameter: domain name"
   }
 ]

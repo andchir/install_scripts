@@ -76,5 +76,11 @@
     "script_name": "jitsi-meet",
     "description": "Платформа для видеоконференций Jitsi Meet. Устанавливает: Prosody XMPP, Jitsi Videobridge, Jicofo, Nginx, Certbot",
     "info": "Необходимый параметр: доменное имя"
+  },
+  {
+    "name": "netdata/netdata",
+    "script_name": "netdata",
+    "description": "Система мониторинга серверов в реальном времени Netdata. Устанавливает: Netdata, Nginx, Certbot, базовую аутентификацию",
+    "info": "Необходимый параметр: доменное имя"
   }
 ]
