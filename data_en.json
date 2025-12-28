@@ -98,7 +98,13 @@
   {
     "name": "xtekky/gpt4free",
     "script_name": "gpt4free",
-    "description": "Free GPT4Free API interface for working with various LLM providers. Installs: Git, Python 3, pip, venv, Nginx, Certbot, GPT4Free with web interface and API, systemd service",
+    "description": "Free GPT4Free API interface for working with various LLM providers. Installs: Git, Python 3, pip, venv, Nginx, Certbot, GPT4Free with web interface and API, basic authentication, systemd service",
     "info": "Required parameter: domain name"
+  },
+  {
+    "name": "link-assistant/hive-mind",
+    "script_name": "hive-mind",
+    "description": "Hive Mind AI orchestrator with Telegram bot integration. Installs: Docker, Docker Compose, Hive Mind, Telegram Bot",
+    "info": "Required parameters: Telegram bot token, Telegram group ID"
   }
 ]

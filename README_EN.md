@@ -39,7 +39,8 @@ This project provides a set of bash scripts for quick deployment of popular soft
 | `netdata.sh` | Real-time server monitoring system | Netdata, Nginx, Certbot, basic authentication |
 | `uptime-kuma.sh` | Self-hosted uptime monitoring tool | Git, Node.js 20.x, npm, Nginx, Certbot, systemd service |
 | `linux-dash.sh` | Linux server monitoring dashboard | Git, Python 3, linux-dash, Nginx, Certbot, basic authentication, systemd service |
-| `gpt4free.sh` | Free GPT4Free interface for working with various LLMs | Git, Python 3, pip, venv, Nginx, Certbot, GPT4Free with web interface and API, systemd service |
+| `gpt4free.sh` | Free GPT4Free interface for working with various LLMs | Git, Python 3, pip, venv, Nginx, Certbot, GPT4Free with web interface and API, basic authentication, systemd service |
+| `hive-mind.sh` | Hive Mind AI orchestrator with Telegram bot | Docker, Docker Compose, Hive Mind, Telegram Bot, Nginx, Certbot |
 
 ## Usage
 

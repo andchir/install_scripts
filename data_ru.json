@@ -98,7 +98,13 @@
   {
     "name": "xtekky/gpt4free",
     "script_name": "gpt4free",
-    "description": "Бесплатный API-интерфейс GPT4Free для работы с различными LLM провайдерами. Устанавливает: Git, Python 3, pip, venv, Nginx, Certbot, GPT4Free с веб-интерфейсом и API, systemd-сервис",
+    "description": "Бесплатный API-интерфейс GPT4Free для работы с различными LLM провайдерами. Устанавливает: Git, Python 3, pip, venv, Nginx, Certbot, GPT4Free с веб-интерфейсом и API, базовую аутентификацию, systemd-сервис",
     "info": "Необходимый параметр: доменное имя"
+  },
+  {
+    "name": "link-assistant/hive-mind",
+    "script_name": "hive-mind",
+    "description": "AI-оркестратор Hive Mind с интеграцией Telegram-бота. Устанавливает: Docker, Docker Compose, Hive Mind, Telegram Bot",
+    "info": "Необходимые параметры: токен Telegram-бота, ID группы Telegram"
   }
 ]
