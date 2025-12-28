@@ -82,5 +82,11 @@
     "script_name": "netdata",
     "description": "Система мониторинга серверов в реальном времени Netdata. Устанавливает: Netdata, Nginx, Certbot, базовую аутентификацию",
     "info": "Необходимый параметр: доменное имя"
+  },
+  {
+    "name": "louislam/uptime-kuma",
+    "script_name": "uptime-kuma",
+    "description": "Инструмент мониторинга статусов сервисов Uptime Kuma. Устанавливает: Git, Node.js 20.x, npm, Nginx, Certbot, systemd-сервис",
+    "info": "Необходимый параметр: доменное имя"
   }
 ]

@@ -82,5 +82,11 @@
     "script_name": "netdata",
     "description": "Real-time server monitoring system Netdata. Installs: Netdata, Nginx, Certbot, basic authentication",
     "info": "Required parameter: domain name"
+  },
+  {
+    "name": "louislam/uptime-kuma",
+    "script_name": "uptime-kuma",
+    "description": "Self-hosted uptime monitoring tool Uptime Kuma. Installs: Git, Node.js 20.x, npm, Nginx, Certbot, systemd service",
+    "info": "Required parameter: domain name"
   }
 ]

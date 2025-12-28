@@ -32,6 +32,7 @@ This project provides a set of bash scripts for quick deployment of popular soft
 | `rocketchat.sh` | Rocket.Chat messaging platform | Docker, Docker Compose, MongoDB 6.0 with replica set, Rocket.Chat, Nginx, Certbot |
 | `jitsi-meet.sh` | Jitsi Meet video conferencing platform | Prosody XMPP, Jitsi Videobridge, Jicofo, Nginx, Certbot |
 | `netdata.sh` | Real-time server monitoring system | Netdata, Nginx, Certbot, basic authentication |
+| `uptime-kuma.sh` | Self-hosted uptime monitoring tool | Git, Node.js 20.x, npm, Nginx, Certbot, systemd service |
 
 ## Usage
 
