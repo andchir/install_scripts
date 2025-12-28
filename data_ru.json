@@ -94,5 +94,11 @@
     "script_name": "linux-dash",
     "description": "Панель мониторинга системы Linux с веб-интерфейсом. Устанавливает: Git, Python 3, linux-dash, Nginx, Certbot, базовую аутентификацию, systemd-сервис",
     "info": "Необходимый параметр: доменное имя"
+  },
+  {
+    "name": "teableio/teable",
+    "script_name": "teable",
+    "description": "Платформа электронных таблиц с функциями базы данных Teable. Устанавливает: Docker, Docker Compose, PostgreSQL 15, Redis 7, Teable, Nginx, Certbot",
+    "info": "Необходимый параметр: доменное имя"
   }
 ]

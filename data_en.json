@@ -94,5 +94,11 @@
     "script_name": "linux-dash",
     "description": "Linux server monitoring dashboard with web interface. Installs: Git, Python 3, linux-dash, Nginx, Certbot, basic authentication, systemd service",
     "info": "Required parameter: domain name"
+  },
+  {
+    "name": "teableio/teable",
+    "script_name": "teable",
+    "description": "Spreadsheet-database platform Teable. Installs: Docker, Docker Compose, PostgreSQL 15, Redis 7, Teable, Nginx, Certbot",
+    "info": "Required parameter: domain name"
   }
 ]
