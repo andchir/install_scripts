@@ -10,7 +10,7 @@
 #   - Clones the gpt4free repository
 #   - Sets up Python virtual environment with dependencies
 #   - Creates systemd services for automatic startup
-#   - Configures Nginx as reverse proxy
+#   - Configures Nginx as reverse proxy with basic authentication
 #   - Obtains SSL certificate via Let's Encrypt
 #
 #   Repository: https://github.com/xtekky/gpt4free
@@ -103,6 +103,11 @@ print_info() {
     echo -e "${MAGENTA}i${NC} ${WHITE}$1${NC}"
 }
 
+generate_password() {
+    # Generate a secure random password
+    openssl rand -base64 24 | tr -d '/+=' | head -c 20
+}
+
 check_root() {
     if [[ $EUID -ne 0 ]]; then
         print_error "This script must be run as root!"
@@ -161,6 +166,7 @@ show_banner() {
     echo -e "${CYAN}   |${NC}   ${GREEN}*${NC} Git, Python 3.10+, Nginx, Certbot                                   ${CYAN}|${NC}"
     echo -e "${CYAN}   |${NC}   ${GREEN}*${NC} GPT4Free with Web UI and API                                        ${CYAN}|${NC}"
     echo -e "${CYAN}   |${NC}   ${GREEN}*${NC} Python virtual environment with dependencies                        ${CYAN}|${NC}"
+    echo -e "${CYAN}   |${NC}   ${GREEN}*${NC} Nginx reverse proxy with basic authentication                       ${CYAN}|${NC}"
     echo -e "${CYAN}   |${NC}   ${GREEN}*${NC} Systemd service for auto-start                                      ${CYAN}|${NC}"
     echo -e "${CYAN}   |${NC}   ${GREEN}*${NC} SSL certificate via Let's Encrypt                                   ${CYAN}|${NC}"
     echo -e "${CYAN}   |${NC}                                                                         ${CYAN}|${NC}"
@@ -209,7 +215,7 @@ install_dependencies() {
     print_success "Certbot installed"
 
     print_step "Installing additional dependencies..."
-    apt-get install -y -qq build-essential libffi-dev libssl-dev curl wget > /dev/null 2>&1
+    apt-get install -y -qq build-essential libffi-dev libssl-dev curl wget apache2-utils > /dev/null 2>&1
     print_success "Additional dependencies installed"
 
     # Install Chrome/Chromium for browser automation (some providers need it)
@@ -297,6 +303,46 @@ EOF
     print_success ".env file created with secure permissions"
 }
 
+create_htpasswd() {
+    print_header "Creating Authentication"
+
+    HTPASSWD_FILE="/etc/nginx/.htpasswd-gpt4free"
+
+    # Check if htpasswd file already exists
+    if [[ -f "$HTPASSWD_FILE" ]]; then
+        print_info "Authentication file already exists"
+        print_step "Skipping password generation to preserve existing credentials..."
+
+        # Read existing username from file
+        ADMIN_USERNAME=$(head -1 "$HTPASSWD_FILE" | cut -d':' -f1)
+        ADMIN_PASSWORD="(stored in $HTPASSWD_FILE)"
+        export ADMIN_USERNAME ADMIN_PASSWORD
+        print_success "Using existing authentication configuration"
+        return
+    fi
+
+    ADMIN_USERNAME="admin"
+    ADMIN_PASSWORD=$(generate_password)
+
+    print_step "Creating htpasswd file for basic authentication..."
+    htpasswd -bc "$HTPASSWD_FILE" "$ADMIN_USERNAME" "$ADMIN_PASSWORD" > /dev/null 2>&1
+    chmod 640 "$HTPASSWD_FILE"
+    chown root:www-data "$HTPASSWD_FILE"
+    print_success "Authentication file created"
+
+    # Store credentials for reference
+    CREDENTIALS_FILE="$HOME_DIR/.gpt4free-credentials"
+    cat > "$CREDENTIALS_FILE" << EOF
+ADMIN_USERNAME=$ADMIN_USERNAME
+ADMIN_PASSWORD=$ADMIN_PASSWORD
+EOF
+    chown "$CURRENT_USER":"$CURRENT_USER" "$CREDENTIALS_FILE"
+    chmod 600 "$CREDENTIALS_FILE"
+    print_success "Credentials saved to $CREDENTIALS_FILE"
+
+    export ADMIN_USERNAME ADMIN_PASSWORD
+}
+
 create_systemd_service() {
     print_header "Creating Systemd Service"
 
@@ -366,6 +412,9 @@ server {
     error_log /var/log/nginx/${DOMAIN_NAME}_error.log;
 
     location / {
+        auth_basic "GPT4Free Web Interface";
+        auth_basic_user_file /etc/nginx/.htpasswd-gpt4free;
+
         proxy_pass http://127.0.0.1:$APP_PORT;
         proxy_http_version 1.1;
         proxy_set_header Upgrade \$http_upgrade;
@@ -473,6 +522,11 @@ show_completion_message() {
     echo -e "  ${CYAN}*${NC} Virtual env:   ${BOLD}$VENV_DIR${NC}"
     echo ""
 
+    echo -e "${WHITE}Admin Credentials:${NC}"
+    echo -e "  ${CYAN}*${NC} Username:      ${BOLD}$ADMIN_USERNAME${NC}"
+    echo -e "  ${CYAN}*${NC} Password:      ${BOLD}$ADMIN_PASSWORD${NC}"
+    echo ""
+
     echo -e "${WHITE}Service Management:${NC}"
     echo -e "  ${CYAN}*${NC} Check status:  ${BOLD}sudo systemctl status ${SERVICE_NAME}${NC}"
     echo -e "  ${CYAN}*${NC} Restart:       ${BOLD}sudo systemctl restart ${SERVICE_NAME}${NC}"
@@ -484,9 +538,22 @@ show_completion_message() {
     echo -e "  ${CYAN}*${NC} API Docs:      ${BOLD}https://$DOMAIN_NAME/docs${NC}"
     echo ""
 
+    echo -e "${WHITE}Configuration Files:${NC}"
+    echo -e "  ${CYAN}*${NC} Nginx config:  ${BOLD}/etc/nginx/sites-available/$DOMAIN_NAME${NC}"
+    echo -e "  ${CYAN}*${NC} Service file:  ${BOLD}/etc/systemd/system/${SERVICE_NAME}.service${NC}"
+    echo ""
+
+    echo -e "${YELLOW}Important:${NC}"
+    echo -e "  ${CYAN}*${NC} Credentials are stored in: ${BOLD}$HOME_DIR/.gpt4free-credentials${NC}"
+    echo -e "  ${CYAN}*${NC} Please save the admin password in a secure location"
+    echo -e "  ${CYAN}*${NC} GPT4Free binds to localhost only for security"
+    echo -e "  ${CYAN}*${NC} All external access goes through Nginx with authentication"
+    echo ""
+
     echo -e "${YELLOW}Next Steps:${NC}"
     echo -e "  ${CYAN}1.${NC} Visit ${BOLD}https://$DOMAIN_NAME/chat/${NC} to access the web interface"
-    echo -e "  ${CYAN}2.${NC} Check ${BOLD}https://$DOMAIN_NAME/docs${NC} for API documentation"
+    echo -e "  ${CYAN}2.${NC} Log in with the admin credentials above"
+    echo -e "  ${CYAN}3.${NC} Check ${BOLD}https://$DOMAIN_NAME/docs${NC} for API documentation"
     echo ""
 
     print_success "Thank you for using GPT4Free installation script!"
@@ -523,6 +590,7 @@ main() {
     setup_python_environment
     create_env_file
     add_user_to_www_data
+    create_htpasswd
     create_systemd_service
     configure_nginx
     setup_ssl_certificate
