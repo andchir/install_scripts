@@ -14,6 +14,8 @@
 - Настраивают nginx с SSL-сертификатами (Let's Encrypt)
 - Выводят результаты установки с цветовой подсветкой
 
+![screenshot](https://raw.githubusercontent.com/andchir/install_scripts/refs/heads/main/screenshots/gui_ru.png)
+
 ## Доступные скрипты
 
 | Скрипт | Описание | Устанавливаемые компоненты |
