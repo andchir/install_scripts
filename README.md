@@ -31,6 +31,7 @@
 | `n8n.sh` | Платформа автоматизации рабочих процессов n8n | Docker, Docker Compose, PostgreSQL 16, n8n, Nginx, Certbot |
 | `rocketchat.sh` | Платформа для обмена сообщениями Rocket.Chat | Docker, Docker Compose, MongoDB 6.0 с replica set, Rocket.Chat, Nginx, Certbot |
 | `jitsi-meet.sh` | Платформа для видеоконференций Jitsi Meet | Prosody XMPP, Jitsi Videobridge, Jicofo, Nginx, Certbot |
+| `netdata.sh` | Система мониторинга серверов в реальном времени | Netdata, Nginx, Certbot, базовая аутентификация |
 
 ## Использование
 
