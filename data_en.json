@@ -96,6 +96,12 @@
     "info": "Required parameter: domain name"
   },
   {
+    "name": "xtekky/gpt4free",
+    "script_name": "gpt4free",
+    "description": "Free GPT4Free API interface for working with various LLM providers. Installs: Git, Python 3, pip, venv, Nginx, Certbot, GPT4Free with web interface and API, basic authentication, systemd service",
+    "info": "Required parameter: domain name"
+  },
+  {
     "name": "teableio/teable",
     "script_name": "teable",
     "description": "Spreadsheet-database platform Teable. Installs: Docker, Docker Compose, PostgreSQL 15, Redis 7, Teable, Nginx, Certbot",
