@@ -14,6 +14,8 @@ This project provides a set of bash scripts for quick deployment of popular soft
 - Configure nginx with SSL certificates (Let's Encrypt)
 - Display installation results with color highlighting
 
+![screenshot](https://raw.githubusercontent.com/andchir/install_scripts/refs/heads/main/screenshots/gui_en.png)
+
 ## Available Scripts
 
 | Script | Description | Installed Components |
