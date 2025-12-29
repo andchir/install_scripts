@@ -292,9 +292,9 @@ setup_python_environment() {
 
     # Install CPU-only version of PyTorch first to avoid large NVIDIA CUDA dependencies
     # Reference: https://community.libretranslate.com/t/using-argos-translate-without-nvidia-dependencies/1061
-    print_step "Installing PyTorch (CPU-only version)..."
-    su - "$CURRENT_USER" -c "cd '$INSTALL_DIR' && source '$VENV_DIR/bin/activate' && pip install torch --index-url https://download.pytorch.org/whl/cpu" > /dev/null 2>&1
-    print_success "PyTorch (CPU-only) installed"
+    # print_step "Installing PyTorch (CPU-only version)..."
+    # su - "$CURRENT_USER" -c "cd '$INSTALL_DIR' && source '$VENV_DIR/bin/activate' && pip install torch --index-url https://download.pytorch.org/whl/cpu" > /dev/null 2>&1
+    # print_success "PyTorch (CPU-only) installed"
 
     print_step "Installing/updating LibreTranslate (this may take a few minutes)..."
     su - "$CURRENT_USER" -c "cd '$INSTALL_DIR' && source '$VENV_DIR/bin/activate' && pip install libretranslate" > /dev/null 2>&1
