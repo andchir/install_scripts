@@ -7,7 +7,7 @@
 #
 #   This script automatically installs and configures:
 #   - Git, Python 3.10+, Nginx, Certbot
-#   - LibreTranslate translation API
+#   - LibreTranslate translation API (CPU-only, no GPU/NVIDIA dependencies)
 #   - Downloads specified language models (default: en,de,ru)
 #   - Sets up Python virtual environment with dependencies
 #   - Creates systemd service for automatic startup
@@ -290,6 +290,12 @@ setup_python_environment() {
     su - "$CURRENT_USER" -c "cd '$INSTALL_DIR' && source '$VENV_DIR/bin/activate' && pip install --upgrade pip" > /dev/null 2>&1
     print_success "Pip upgraded"
 
+    # Install CPU-only version of PyTorch first to avoid large NVIDIA CUDA dependencies
+    # Reference: https://community.libretranslate.com/t/using-argos-translate-without-nvidia-dependencies/1061
+    print_step "Installing PyTorch (CPU-only version)..."
+    su - "$CURRENT_USER" -c "cd '$INSTALL_DIR' && source '$VENV_DIR/bin/activate' && pip install torch --index-url https://download.pytorch.org/whl/cpu" > /dev/null 2>&1
+    print_success "PyTorch (CPU-only) installed"
+
     print_step "Installing/updating LibreTranslate (this may take a few minutes)..."
     su - "$CURRENT_USER" -c "cd '$INSTALL_DIR' && source '$VENV_DIR/bin/activate' && pip install libretranslate" > /dev/null 2>&1
     print_success "LibreTranslate installed"
@@ -406,6 +412,7 @@ User=$CURRENT_USER
 Group=$CURRENT_USER
 WorkingDirectory=$INSTALL_DIR
 Environment="PATH=$VENV_DIR/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="ARGOS_DEVICE_TYPE=cpu"
 ExecStart=$VENV_DIR/bin/libretranslate --host 127.0.0.1 --port $APP_PORT --load-only $LANGUAGES --api-keys --api-keys-db-path $INSTALL_DIR/api_keys.db --threads 4
 Restart=always
 RestartSec=10
