@@ -34,7 +34,7 @@ NC='\033[0m' # No Color
 #-------------------------------------------------------------------------------
 # Configuration variables
 #-------------------------------------------------------------------------------
-REPO_URL="https://github.com/tariqbuilds/linux-dash.git"
+REPO_URL="https://github.com/andchir/linux-dash2.git"
 APP_NAME="linux-dash"
 SERVICE_NAME="linux-dash"
 INSTALLER_USER="installer_user"
