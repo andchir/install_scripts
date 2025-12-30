@@ -20,7 +20,7 @@ pip install -r requirements.txt
 
 ## Available Playbooks
 
-### n8n.yml
+### playbooks/n8n.yml
 
 Installs n8n workflow automation platform with PostgreSQL database.
 
@@ -41,7 +41,7 @@ Installs n8n workflow automation platform with PostgreSQL database.
 
 2. Run the playbook:
    ```bash
-   ansible-playbook -i inventory.ini n8n.yml -e "domain_name=n8n.example.com"
+   ansible-playbook -i inventory.ini playbooks/n8n.yml -e "domain_name=n8n.example.com"
    ```
 
 **Variables:**
@@ -54,7 +54,8 @@ ansible/
 ├── README.md                    # This file
 ├── requirements.txt             # Python dependencies
 ├── inventory.ini.example        # Example inventory file
-├── n8n.yml                      # n8n installation playbook
+├── playbooks/                   # Ansible playbooks
+│   └── n8n.yml                 # n8n installation playbook
 └── templates/                   # Jinja2 templates
     ├── n8n.env.j2              # Environment variables template
     ├── n8n.docker-compose.yml.j2  # Docker Compose template
