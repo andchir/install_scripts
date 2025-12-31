@@ -244,21 +244,6 @@ clone_repository() {
     print_info "Working directory: $INSTALL_DIR"
 }
 
-verify_python3_server() {
-    print_header "Verifying Python 3 Server"
-
-    print_step "Checking for python3.py in repository..."
-
-    if [[ -f "$INSTALL_DIR/app/server/python3.py" ]]; then
-        print_success "Found python3.py from repository"
-        chmod +x "$INSTALL_DIR/app/server/python3.py"
-        print_success "Python 3 server verified"
-    else
-        print_error "python3.py not found in repository"
-        print_error "Expected location: $INSTALL_DIR/app/server/python3.py"
-        exit 1
-    fi
-}
 
 create_systemd_service() {
     print_header "Creating Systemd Service"
@@ -274,7 +259,7 @@ After=network.target
 Type=simple
 User=$CURRENT_USER
 WorkingDirectory=$INSTALL_DIR/app
-ExecStart=/usr/bin/python3 $INSTALL_DIR/app/server/python3.py --port $APP_PORT
+ExecStart=/usr/bin/python3 $INSTALL_DIR/app/server/server_py3.py --port $APP_PORT
 Restart=on-failure
 RestartSec=10
 StandardOutput=syslog
@@ -566,7 +551,6 @@ main() {
     # Execute installation steps
     install_dependencies
     clone_repository
-    verify_python3_server
     add_user_to_www_data
     create_htpasswd
     create_systemd_service
