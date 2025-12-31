@@ -55,15 +55,17 @@ show_usage() {
     echo ""
     echo "Arguments:"
     echo "  domain_name              The domain name for phpMyAdmin (e.g., db.example.com)"
+    echo "                           Use 'localhost' for local development (no SSL, no Basic Auth)"
     echo "  allowed_ip               (Optional) Restrict access to specific IP address"
     echo ""
     echo "Security:"
-    echo "  Basic Authentication is always enabled for security."
+    echo "  Basic Authentication is always enabled for security (except for localhost)."
     echo "  Credentials will be generated and saved to the credentials file."
     echo ""
     echo "Examples:"
     echo "  $0 db.example.com"
     echo "  $0 db.example.com 192.168.1.100"
+    echo "  $0 localhost              # Local access at http://localhost/phpmyadmin"
     echo ""
     echo "Note: This script must be run as root or with sudo."
     exit 1
@@ -71,10 +73,14 @@ show_usage() {
 
 validate_domain() {
     local domain="$1"
+    # Allow "localhost" as a special case
+    if [[ "$domain" == "localhost" ]]; then
+        return 0
+    fi
     # Basic domain validation regex
     if [[ ! "$domain" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$ ]]; then
         print_error "Invalid domain format: $domain"
-        print_info "Please enter a valid domain (e.g., db.example.com)"
+        print_info "Please enter a valid domain (e.g., db.example.com) or use 'localhost' for local access"
         exit 1
     fi
 }
@@ -220,7 +226,12 @@ parse_arguments() {
     if [[ -n "$ALLOWED_IP" ]]; then
         print_success "IP restriction enabled: $ALLOWED_IP"
     fi
-    print_success "Basic Authentication: enabled (mandatory)"
+    if [[ "$DOMAIN_NAME" == "localhost" ]]; then
+        print_success "Basic Authentication: disabled (localhost mode)"
+        print_success "SSL Certificate: disabled (localhost mode)"
+    else
+        print_success "Basic Authentication: enabled (mandatory)"
+    fi
 }
 
 install_dependencies() {
@@ -466,6 +477,16 @@ get_php_fpm_socket() {
 create_htpasswd() {
     print_header "Creating Basic Authentication"
 
+    # Skip basic auth for localhost
+    if [[ "$DOMAIN_NAME" == "localhost" ]]; then
+        print_info "Skipping Basic Authentication for localhost"
+        print_success "No authentication required for localhost access"
+        BASIC_AUTH_USER=""
+        BASIC_AUTH_PASSWORD=""
+        export BASIC_AUTH_USER BASIC_AUTH_PASSWORD
+        return
+    fi
+
     HTPASSWD_FILE="/etc/nginx/.htpasswd-phpmyadmin"
 
     # Check if htpasswd file already exists
@@ -508,7 +529,7 @@ configure_nginx() {
 
     # Check if SSL certificate already exists - if so, skip nginx configuration
     # to preserve the existing HTTPS configuration created by certbot
-    if [[ -d "/etc/letsencrypt/live/$DOMAIN_NAME" ]]; then
+    if [[ "$DOMAIN_NAME" != "localhost" ]] && [[ -d "/etc/letsencrypt/live/$DOMAIN_NAME" ]]; then
         print_info "SSL certificate for $DOMAIN_NAME already exists"
         print_step "Skipping Nginx configuration to preserve existing HTTPS settings..."
         print_success "Using existing Nginx configuration"
@@ -534,15 +555,54 @@ configure_nginx() {
         print_info "IP restriction configured for: $ALLOWED_IP"
     fi
 
-    # Build Basic Auth directives (always enabled)
-    local BASIC_AUTH_DIRECTIVES="
+    # Build Basic Auth directives (enabled except for localhost)
+    local BASIC_AUTH_DIRECTIVES=""
+    if [[ "$DOMAIN_NAME" != "localhost" ]]; then
+        BASIC_AUTH_DIRECTIVES="
         auth_basic \"phpMyAdmin\";
         auth_basic_user_file /etc/nginx/.htpasswd-phpmyadmin;"
-    print_info "Basic Authentication enabled"
+        print_info "Basic Authentication enabled"
+    else
+        print_info "Basic Authentication disabled for localhost"
+    fi
 
     print_step "Creating Nginx configuration..."
 
-    tee /etc/nginx/sites-available/$DOMAIN_NAME > /dev/null << EOF
+    # For localhost, configure phpMyAdmin at /phpmyadmin path
+    if [[ "$DOMAIN_NAME" == "localhost" ]]; then
+        tee /etc/nginx/sites-available/phpmyadmin-localhost > /dev/null << EOF
+server {
+    listen 80;
+    server_name localhost;
+
+    access_log /var/log/nginx/phpmyadmin_localhost_access.log;
+    error_log /var/log/nginx/phpmyadmin_localhost_error.log;
+$IP_RESTRICTION
+
+    location /phpmyadmin {
+        alias /usr/share/phpmyadmin;
+        index index.php index.html index.htm;
+        try_files \$uri \$uri/ /phpmyadmin/index.php?\$args;
+
+        location ~ \.php\$ {
+            fastcgi_split_path_info ^(.+\.php)(/.+)\$;
+            fastcgi_pass unix:$PHP_FPM_SOCKET;
+            fastcgi_index index.php;
+            include fastcgi_params;
+            fastcgi_param SCRIPT_FILENAME /usr/share/phpmyadmin\$fastcgi_script_name;
+        }
+    }
+
+    location ~ ^/phpmyadmin/(libraries|setup)/ {
+        deny all;
+    }
+
+    client_max_body_size 100M;
+}
+EOF
+    else
+        # For regular domains, use standard configuration
+        tee /etc/nginx/sites-available/$DOMAIN_NAME > /dev/null << EOF
 server {
     listen 80;
     server_name $DOMAIN_NAME;
@@ -577,11 +637,16 @@ $IP_RESTRICTION
     client_max_body_size 100M;
 }
 EOF
+    fi
 
     print_success "Nginx configuration created"
 
     print_step "Enabling site..."
-    ln -sf /etc/nginx/sites-available/$DOMAIN_NAME /etc/nginx/sites-enabled/
+    if [[ "$DOMAIN_NAME" == "localhost" ]]; then
+        ln -sf /etc/nginx/sites-available/phpmyadmin-localhost /etc/nginx/sites-enabled/
+    else
+        ln -sf /etc/nginx/sites-available/$DOMAIN_NAME /etc/nginx/sites-enabled/
+    fi
     print_success "Site enabled"
 
     print_step "Testing Nginx configuration..."
@@ -606,6 +671,13 @@ EOF
 
 setup_ssl_certificate() {
     print_header "Setting Up SSL Certificate"
+
+    # Skip SSL setup for localhost
+    if [[ "$DOMAIN_NAME" == "localhost" ]]; then
+        print_info "Skipping SSL certificate setup for localhost"
+        print_success "Using HTTP for localhost (no SSL required)"
+        return
+    fi
 
     # Check if SSL certificate already exists
     if [[ -d "/etc/letsencrypt/live/$DOMAIN_NAME" ]]; then
@@ -665,7 +737,11 @@ show_completion_message() {
     print_header "Installation Summary"
 
     echo -e "${WHITE}Application Details:${NC}"
-    echo -e "  ${CYAN}*${NC} phpMyAdmin URL:    ${BOLD}https://$DOMAIN_NAME${NC}"
+    if [[ "$DOMAIN_NAME" == "localhost" ]]; then
+        echo -e "  ${CYAN}*${NC} phpMyAdmin URL:    ${BOLD}http://localhost/phpmyadmin${NC}"
+    else
+        echo -e "  ${CYAN}*${NC} phpMyAdmin URL:    ${BOLD}https://$DOMAIN_NAME${NC}"
+    fi
     echo -e "  ${CYAN}*${NC} Install path:      ${BOLD}/usr/share/phpmyadmin${NC}"
     echo ""
 
@@ -678,14 +754,16 @@ show_completion_message() {
     echo -e "  ${CYAN}*${NC} Password:          ${BOLD}$PMA_PASSWORD${NC}"
     echo ""
 
-    # Show security settings (Basic Auth is always enabled)
-    echo -e "${WHITE}Security Settings:${NC}"
-    if [[ -n "$ALLOWED_IP" ]]; then
-        echo -e "  ${CYAN}*${NC} IP restriction:    ${BOLD}Access allowed only from $ALLOWED_IP${NC}"
+    # Show security settings (Basic Auth is enabled except for localhost)
+    if [[ "$DOMAIN_NAME" != "localhost" ]]; then
+        echo -e "${WHITE}Security Settings:${NC}"
+        if [[ -n "$ALLOWED_IP" ]]; then
+            echo -e "  ${CYAN}*${NC} IP restriction:    ${BOLD}Access allowed only from $ALLOWED_IP${NC}"
+        fi
+        echo -e "  ${CYAN}*${NC} Basic Auth user:   ${BOLD}$BASIC_AUTH_USER${NC}"
+        echo -e "  ${CYAN}*${NC} Basic Auth pass:   ${BOLD}$BASIC_AUTH_PASSWORD${NC}"
+        echo ""
     fi
-    echo -e "  ${CYAN}*${NC} Basic Auth user:   ${BOLD}$BASIC_AUTH_USER${NC}"
-    echo -e "  ${CYAN}*${NC} Basic Auth pass:   ${BOLD}$BASIC_AUTH_PASSWORD${NC}"
-    echo ""
 
     echo -e "${WHITE}Service Management:${NC}"
     echo -e "  ${CYAN}*${NC} MySQL status:      ${BOLD}sudo systemctl status mysql${NC}"
@@ -696,16 +774,24 @@ show_completion_message() {
 
     echo -e "${YELLOW}Important:${NC}"
     echo -e "  ${CYAN}*${NC} Credentials are stored in: ${BOLD}$HOME_DIR/.mysql_credentials${NC}"
-    echo -e "  ${CYAN}*${NC} Basic Auth credentials: ${BOLD}$HOME_DIR/.phpmyadmin-auth${NC}"
+    if [[ "$DOMAIN_NAME" != "localhost" ]]; then
+        echo -e "  ${CYAN}*${NC} Basic Auth credentials: ${BOLD}$HOME_DIR/.phpmyadmin-auth${NC}"
+    fi
     echo -e "  ${CYAN}*${NC} Please save the passwords in a secure location"
     echo -e "  ${CYAN}*${NC} Consider changing the default passwords after first login"
     echo ""
 
     echo -e "${YELLOW}Next Steps:${NC}"
-    echo -e "  ${CYAN}1.${NC} Visit ${BOLD}https://$DOMAIN_NAME${NC} to access phpMyAdmin"
-    echo -e "  ${CYAN}2.${NC} Enter Basic Auth credentials when prompted"
-    echo -e "  ${CYAN}3.${NC} Log in to phpMyAdmin with MySQL credentials"
-    echo -e "  ${CYAN}4.${NC} Create databases and users as needed"
+    if [[ "$DOMAIN_NAME" == "localhost" ]]; then
+        echo -e "  ${CYAN}1.${NC} Visit ${BOLD}http://localhost/phpmyadmin${NC} to access phpMyAdmin"
+        echo -e "  ${CYAN}2.${NC} Log in to phpMyAdmin with MySQL credentials"
+        echo -e "  ${CYAN}3.${NC} Create databases and users as needed"
+    else
+        echo -e "  ${CYAN}1.${NC} Visit ${BOLD}https://$DOMAIN_NAME${NC} to access phpMyAdmin"
+        echo -e "  ${CYAN}2.${NC} Enter Basic Auth credentials when prompted"
+        echo -e "  ${CYAN}3.${NC} Log in to phpMyAdmin with MySQL credentials"
+        echo -e "  ${CYAN}4.${NC} Create databases and users as needed"
+    fi
     echo ""
 
     print_success "Thank you for using MySQL + phpMyAdmin installer!"
