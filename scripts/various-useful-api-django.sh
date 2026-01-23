@@ -531,6 +531,10 @@ server {
         alias $INSTALL_DIR/static/;
     }
 
+    location /uploads/ {
+        alias $INSTALL_DIR/uploads/;
+    }
+
     location /media/ {
         alias $INSTALL_DIR/media/;
     }
