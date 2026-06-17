@@ -20,7 +20,7 @@ from app import (
     generate_task_id, get_task_file_path, write_task_status, read_task_status,
     delete_task_file, append_task_content, strip_ansi_codes,
     TASK_STATUS_PROCESSING, TASK_STATUS_COMPLETED, TASK_STATUS_ERROR,
-    TASKS_DIR, SSH_DEFAULT_PORT
+    TASKS_DIR, SSH_DEFAULT_PORT, build_remote_install_command
 )
 
 
@@ -408,6 +408,24 @@ class TestInstallEndpoint(unittest.TestCase):
 class TestExecuteScriptViaSSH(unittest.TestCase):
     """Test cases for the execute_script_via_ssh function."""
 
+    def test_build_remote_install_command_without_sudo(self):
+        """Test remote command generation for root SSH users."""
+        command = build_remote_install_command('test-script', 'example.com')
+
+        self.assertIn('curl -fsSL -o-', command)
+        self.assertIn('test-script.sh', command)
+        self.assertIn("'example.com'", command)
+        self.assertNotIn('sudo', command)
+
+    def test_build_remote_install_command_with_sudo(self):
+        """Test remote command generation for non-root sudo SSH users."""
+        command = build_remote_install_command('test-script', 'example.com', use_sudo=True)
+
+        self.assertTrue(command.startswith("sudo -S -p '' bash -c "))
+        self.assertIn('curl -fsSL -o-', command)
+        self.assertIn('test-script.sh', command)
+        self.assertIn("'example.com'", command)
+
     @unittest.skipIf(not SSH_AVAILABLE, "paramiko not installed")
     @patch('app.paramiko.SSHClient')
     def test_execute_script_success(self, mock_ssh_class):
@@ -422,7 +440,8 @@ class TestExecuteScriptViaSSH(unittest.TestCase):
         mock_stderr = MagicMock()
         mock_stderr.read.return_value = b''
 
-        mock_ssh.exec_command.return_value = (MagicMock(), mock_stdout, mock_stderr)
+        mock_stdin = MagicMock()
+        mock_ssh.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
 
         success, output, error = execute_script_via_ssh(
             server_ip='192.168.1.1',
@@ -436,6 +455,9 @@ class TestExecuteScriptViaSSH(unittest.TestCase):
         mock_ssh.connect.assert_called_once()
         connect_kwargs = mock_ssh.connect.call_args.kwargs
         self.assertEqual(connect_kwargs['username'], 'root')
+        command = mock_ssh.exec_command.call_args[0][0]
+        self.assertNotIn('sudo', command)
+        mock_stdin.write.assert_not_called()
 
     @unittest.skipIf(not SSH_AVAILABLE, "paramiko not installed")
     @patch('app.paramiko.SSHClient')
@@ -451,7 +473,8 @@ class TestExecuteScriptViaSSH(unittest.TestCase):
         mock_stderr = MagicMock()
         mock_stderr.read.return_value = b''
 
-        mock_ssh.exec_command.return_value = (MagicMock(), mock_stdout, mock_stderr)
+        mock_stdin = MagicMock()
+        mock_ssh.exec_command.return_value = (mock_stdin, mock_stdout, mock_stderr)
 
         success, output, error = execute_script_via_ssh(
             server_ip='192.168.1.1',
@@ -466,6 +489,10 @@ class TestExecuteScriptViaSSH(unittest.TestCase):
         mock_ssh.connect.assert_called_once()
         connect_kwargs = mock_ssh.connect.call_args.kwargs
         self.assertEqual(connect_kwargs['username'], 'ubuntu')
+        command = mock_ssh.exec_command.call_args[0][0]
+        self.assertTrue(command.startswith("sudo -S -p '' bash -c "))
+        mock_stdin.write.assert_called_once_with("password\n")
+        mock_stdin.flush.assert_called_once()
 
     @unittest.skipIf(not SSH_AVAILABLE, "paramiko not installed")
     @patch('app.paramiko.SSHClient')

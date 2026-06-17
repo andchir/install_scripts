@@ -19,6 +19,7 @@ import time
 import argparse
 import logging
 import hashlib
+import shlex
 import threading
 from typing import Optional
 from functools import wraps
@@ -138,6 +139,27 @@ def escape_shell_args(additional: str) -> str:
         escaped_args.append(f"'{escaped_arg}'")
 
     return ' '.join(escaped_args)
+
+
+def build_remote_install_command(script_name: str, additional: str = '', use_sudo: bool = False) -> str:
+    """
+    Build the remote shell command used to download and execute an install script.
+
+    Non-root SSH users need sudo because install scripts intentionally require
+    root privileges for package installation, systemd, nginx, and filesystem work.
+    """
+    script_url = f"{SCRIPTS_BASE_URL}/{script_name}.sh"
+
+    if additional:
+        escaped_args = escape_shell_args(additional)
+        command = f"curl -fsSL -o- {script_url} | bash -s -- {escaped_args}"
+    else:
+        command = f"curl -fsSL -o- {script_url} | bash"
+
+    if use_sudo:
+        command = f"sudo -S -p '' bash -c {shlex.quote(command)}"
+
+    return command
 
 
 def get_task_file_path(task_id):
@@ -563,22 +585,18 @@ def execute_script_via_ssh(server_ip, server_root_password, script_name, additio
             allow_agent=False
         )
 
-        # Build the command to download and execute the script
-        # The script is piped directly to bash without saving to disk
-        script_url = f"{SCRIPTS_BASE_URL}/{script_name}.sh"
-
-        if additional:
-            # Escape and format the additional parameter(s)
-            # If the value contains spaces, it is split into multiple arguments
-            escaped_args = escape_shell_args(additional)
-            command = f"curl -fsSL -o- {script_url} | bash -s -- {escaped_args}"
-        else:
-            command = f"curl -fsSL -o- {script_url} | bash"
+        # Build the command to download and execute the script.
+        # The script is piped directly to bash without saving to disk.
+        use_sudo = server_root_username != 'root'
+        command = build_remote_install_command(script_name, additional, use_sudo=use_sudo)
 
         logger.info(f"Executing command: {command}")
 
         # Execute the command
         stdin, stdout, stderr = ssh_client.exec_command(command, get_pty=True)
+        if use_sudo:
+            stdin.write(f"{server_root_password}\n")
+            stdin.flush()
 
         # Read output
         output = stdout.read().decode('utf-8', errors='replace')
@@ -650,22 +668,18 @@ def execute_script_via_ssh_async(task_id, server_ip, server_root_password, scrip
             allow_agent=False
         )
 
-        # Build the command to download and execute the script
-        script_url = f"{SCRIPTS_BASE_URL}/{script_name}.sh"
-
-        if additional:
-            # Escape and format the additional parameter(s)
-            # If the value contains spaces, it is split into multiple arguments
-            escaped_args = escape_shell_args(additional)
-            command = f"curl -fsSL -o- {script_url} | bash -s -- {escaped_args}"
-        else:
-            command = f"curl -fsSL -o- {script_url} | bash"
+        # Build the command to download and execute the script.
+        use_sudo = server_root_username != 'root'
+        command = build_remote_install_command(script_name, additional, use_sudo=use_sudo)
 
         logger.info(f"[Task {task_id}] Executing command: {command}")
         append_task_content(task_id, f"Executing script: {script_name}\n")
 
         # Execute the command
         stdin, stdout, stderr = ssh_client.exec_command(command, get_pty=True)
+        if use_sudo:
+            stdin.write(f"{server_root_password}\n")
+            stdin.flush()
 
         # Stream output to the task file
         output_buffer = []
