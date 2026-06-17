@@ -20,7 +20,7 @@ from app import (
     generate_task_id, get_task_file_path, write_task_status, read_task_status,
     delete_task_file, append_task_content, strip_ansi_codes,
     TASK_STATUS_PROCESSING, TASK_STATUS_COMPLETED, TASK_STATUS_ERROR,
-    TASKS_DIR, SSH_DEFAULT_PORT, build_remote_install_command
+    TASKS_DIR, SSH_DEFAULT_PORT, build_remote_install_command, redact_secret
 )
 
 
@@ -421,10 +421,16 @@ class TestExecuteScriptViaSSH(unittest.TestCase):
         """Test remote command generation for non-root sudo SSH users."""
         command = build_remote_install_command('test-script', 'example.com', use_sudo=True)
 
-        self.assertTrue(command.startswith("sudo -S -p '' bash -c "))
+        self.assertIn("stty -echo; sudo -S -p '' -v", command)
+        self.assertIn("stty echo", command)
+        self.assertIn("sudo -n bash -c ", command)
         self.assertIn('curl -fsSL -o-', command)
         self.assertIn('test-script.sh', command)
         self.assertIn("'example.com'", command)
+
+    def test_redact_secret(self):
+        """Test sensitive values are removed from command output."""
+        self.assertEqual(redact_secret('before password after', 'password'), 'before [redacted] after')
 
     @unittest.skipIf(not SSH_AVAILABLE, "paramiko not installed")
     @patch('app.paramiko.SSHClient')
@@ -490,7 +496,9 @@ class TestExecuteScriptViaSSH(unittest.TestCase):
         connect_kwargs = mock_ssh.connect.call_args.kwargs
         self.assertEqual(connect_kwargs['username'], 'ubuntu')
         command = mock_ssh.exec_command.call_args[0][0]
-        self.assertTrue(command.startswith("sudo -S -p '' bash -c "))
+        self.assertIn("stty -echo; sudo -S -p '' -v", command)
+        self.assertIn("sudo -n bash -c ", command)
+        self.assertNotIn("password", command)
         mock_stdin.write.assert_called_once_with("password\n")
         mock_stdin.flush.assert_called_once()
 

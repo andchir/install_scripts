@@ -157,9 +157,18 @@ def build_remote_install_command(script_name: str, additional: str = '', use_sud
         command = f"curl -fsSL -o- {script_url} | bash"
 
     if use_sudo:
-        command = f"sudo -S -p '' bash -c {shlex.quote(command)}"
+        sudo_check = "stty -echo; sudo -S -p '' -v; sudo_status=$?; stty echo; if [ $sudo_status -ne 0 ]; then exit $sudo_status; fi"
+        command = f"{sudo_check}; sudo -n bash -c {shlex.quote(command)}"
 
     return command
+
+
+def redact_secret(text: str, secret: str) -> str:
+    """Remove sensitive values from command output before returning or storing it."""
+    if not text or not secret:
+        return text
+
+    return text.replace(secret, '[redacted]')
 
 
 def get_task_file_path(task_id):
@@ -609,6 +618,8 @@ def execute_script_via_ssh(server_ip, server_root_password, script_name, additio
         full_output = output
         if error_output:
             full_output += '\n' + error_output
+        if use_sudo:
+            full_output = redact_secret(full_output, server_root_password)
 
         if exit_status != 0:
             return False, full_output, f'Script exited with status {exit_status}'
@@ -688,11 +699,15 @@ def execute_script_via_ssh_async(task_id, server_ip, server_root_password, scrip
             if not line:
                 break
             decoded_line = line if isinstance(line, str) else line.decode('utf-8', errors='replace')
+            if use_sudo:
+                decoded_line = redact_secret(decoded_line, server_root_password)
             output_buffer.append(decoded_line)
             append_task_content(task_id, decoded_line)
 
         # Read any remaining stderr
         error_output = stderr.read().decode('utf-8', errors='replace')
+        if use_sudo:
+            error_output = redact_secret(error_output, server_root_password)
         if error_output:
             append_task_content(task_id, f"\n{error_output}")
 
