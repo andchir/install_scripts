@@ -116,7 +116,7 @@ curl -fsSL -o- https://raw.githubusercontent.com/andchir/install_scripts/refs/he
 # Via API
 curl -X POST http://localhost:5000/api/install \
   -H "Content-Type: application/json" \
-  -d '{"script_name": "pocketbase", "server_ip": "192.168.1.100", "server_root_password": "pass", "additional": "example.com"}'
+  -d '{"script_name": "pocketbase", "server_ip": "192.168.1.100", "server_root_username": "root", "server_root_password": "pass", "additional": "example.com"}'
 ```
 
 **When to use**:

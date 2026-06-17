@@ -304,6 +304,21 @@ class TestInstallEndpoint(unittest.TestCase):
         # Verify task_id is a valid MD5 hash (32 hex characters)
         self.assertRegex(data['task_id'], r'^[a-f0-9]{32}$')
 
+    def test_install_endpoint_accepts_server_root_username(self):
+        """Test that /api/install accepts optional server_root_username."""
+        response = self.client.post('/api/install',
+                                    data=json.dumps({
+                                        'script_name': 'test-script',
+                                        'server_ip': '192.168.1.1',
+                                        'server_root_username': 'ubuntu',
+                                        'server_root_password': 'password'
+                                    }),
+                                    content_type='application/json')
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data['success'])
+        self.assertIn('task_id', data)
+
     def test_install_endpoint_same_params_same_task_id(self):
         """Test that the same parameters generate the same task_id."""
         params = {
@@ -358,6 +373,39 @@ class TestExecuteScriptViaSSH(unittest.TestCase):
         self.assertTrue(success)
         self.assertEqual(output, 'Success')
         self.assertIsNone(error)
+        mock_ssh.connect.assert_called_once()
+        connect_kwargs = mock_ssh.connect.call_args.kwargs
+        self.assertEqual(connect_kwargs['username'], 'root')
+
+    @unittest.skipIf(not SSH_AVAILABLE, "paramiko not installed")
+    @patch('app.paramiko.SSHClient')
+    def test_execute_script_custom_username(self, mock_ssh_class):
+        """Test script execution with custom SSH username."""
+        mock_ssh = MagicMock()
+        mock_ssh_class.return_value = mock_ssh
+
+        mock_stdout = MagicMock()
+        mock_stdout.read.return_value = b'Success'
+        mock_stdout.channel.recv_exit_status.return_value = 0
+
+        mock_stderr = MagicMock()
+        mock_stderr.read.return_value = b''
+
+        mock_ssh.exec_command.return_value = (MagicMock(), mock_stdout, mock_stderr)
+
+        success, output, error = execute_script_via_ssh(
+            server_ip='192.168.1.1',
+            server_root_username='ubuntu',
+            server_root_password='password',
+            script_name='test-script'
+        )
+
+        self.assertTrue(success)
+        self.assertEqual(output, 'Success')
+        self.assertIsNone(error)
+        mock_ssh.connect.assert_called_once()
+        connect_kwargs = mock_ssh.connect.call_args.kwargs
+        self.assertEqual(connect_kwargs['username'], 'ubuntu')
 
     @unittest.skipIf(not SSH_AVAILABLE, "paramiko not installed")
     @patch('app.paramiko.SSHClient')
@@ -455,6 +503,12 @@ class TestTaskHelperFunctions(unittest.TestCase):
         """Test that different parameters produce different task IDs."""
         task_id1 = generate_task_id('script1', '192.168.1.1', 'password', 'extra')
         task_id2 = generate_task_id('script2', '192.168.1.1', 'password', 'extra')
+        self.assertNotEqual(task_id1, task_id2)
+
+    def test_generate_task_id_uses_username(self):
+        """Test that different SSH usernames produce different task IDs."""
+        task_id1 = generate_task_id('script', '192.168.1.1', 'password', 'extra', 'root')
+        task_id2 = generate_task_id('script', '192.168.1.1', 'password', 'extra', 'ubuntu')
         self.assertNotEqual(task_id1, task_id2)
 
     def test_generate_task_id_format(self):

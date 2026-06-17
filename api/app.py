@@ -86,20 +86,21 @@ rate_limiter = RateLimiter(
 )
 
 
-def generate_task_id(script_name, server_ip, server_root_password, additional=''):
+def generate_task_id(script_name, server_ip, server_root_password, additional='', server_root_username='root'):
     """
     Generate a unique task ID based on MD5 hash of all input parameters.
 
     Args:
         script_name: Name of the script to execute
         server_ip: IP address of the remote server
+        server_root_username: Username for SSH authentication
         server_root_password: Root password for SSH authentication
         additional: Additional parameters to pass to the script
 
     Returns:
         str: MD5 hash string to be used as task_id
     """
-    data = f"{script_name}:{server_ip}:{server_root_password}:{additional}"
+    data = f"{script_name}:{server_ip}:{server_root_username}:{server_root_password}:{additional}"
     return hashlib.md5(data.encode('utf-8')).hexdigest()
 
 
@@ -520,7 +521,7 @@ def get_script(script_name):
         }), 500
 
 
-def execute_script_via_ssh(server_ip, server_root_password, script_name, additional=None, port=SSH_DEFAULT_PORT):
+def execute_script_via_ssh(server_ip, server_root_password, script_name, additional=None, port=SSH_DEFAULT_PORT, server_root_username='root'):
     """
     Execute an installation script on a remote server via SSH.
 
@@ -530,6 +531,7 @@ def execute_script_via_ssh(server_ip, server_root_password, script_name, additio
 
     Args:
         server_ip: IP address of the remote server
+        server_root_username: Username for SSH authentication
         server_root_password: Root password for SSH authentication
         script_name: Name of the script to execute (without .sh extension)
         additional: Optional additional parameters to pass to the script
@@ -547,13 +549,13 @@ def execute_script_via_ssh(server_ip, server_root_password, script_name, additio
         ssh_client = paramiko.SSHClient()
         ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-        logger.info(f"Connecting to {server_ip}:{port} via SSH...")
+        logger.info(f"Connecting to {server_ip}:{port} via SSH as {server_root_username}...")
 
         # Connect to the server
         ssh_client.connect(
             hostname=server_ip,
             port=port,
-            username='root',
+            username=server_root_username,
             password=server_root_password,
             timeout=SSH_DEFAULT_TIMEOUT,
             look_for_keys=False,
@@ -607,7 +609,7 @@ def execute_script_via_ssh(server_ip, server_root_password, script_name, additio
             ssh_client.close()
 
 
-def execute_script_via_ssh_async(task_id, server_ip, server_root_password, script_name, additional=None, port=SSH_DEFAULT_PORT):
+def execute_script_via_ssh_async(task_id, server_ip, server_root_password, script_name, additional=None, port=SSH_DEFAULT_PORT, server_root_username='root'):
     """
     Execute an installation script on a remote server via SSH in a background thread.
 
@@ -617,6 +619,7 @@ def execute_script_via_ssh_async(task_id, server_ip, server_root_password, scrip
     Args:
         task_id: The task ID for tracking this execution
         server_ip: IP address of the remote server
+        server_root_username: Username for SSH authentication
         server_root_password: Root password for SSH authentication
         script_name: Name of the script to execute (without .sh extension)
         additional: Optional additional parameters to pass to the script
@@ -632,14 +635,14 @@ def execute_script_via_ssh_async(task_id, server_ip, server_root_password, scrip
         ssh_client = paramiko.SSHClient()
         ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
 
-        logger.info(f"[Task {task_id}] Connecting to {server_ip}:{port} via SSH...")
-        append_task_content(task_id, f"Connecting to {server_ip}:{port} via SSH...\n")
+        logger.info(f"[Task {task_id}] Connecting to {server_ip}:{port} via SSH as {server_root_username}...")
+        append_task_content(task_id, f"Connecting to {server_ip}:{port} via SSH as {server_root_username}...\n")
 
         # Connect to the server
         ssh_client.connect(
             hostname=server_ip,
             port=port,
-            username='root',
+            username=server_root_username,
             password=server_root_password,
             timeout=SSH_DEFAULT_TIMEOUT,
             look_for_keys=False,
@@ -729,6 +732,7 @@ def install():
     POST Parameters (JSON body):
         script_name: Name of the script to execute (required)
         server_ip: IP address of the remote server (required)
+        server_root_username: Username for SSH authentication (optional, default: root)
         server_root_password: Root password for SSH authentication (required)
         additional: Additional parameters to pass to the script (optional)
 
@@ -775,6 +779,7 @@ def install():
 
         script_name = data['script_name']
         server_ip = data['server_ip']
+        server_root_username = data.get('server_root_username') or 'root'
         server_root_password = data['server_root_password']
         additional = data.get('additional', '')
 
@@ -796,7 +801,7 @@ def install():
             }), 400
 
         # Generate task ID based on all input parameters
-        task_id = generate_task_id(script_name, server_ip, server_root_password, additional)
+        task_id = generate_task_id(script_name, server_ip, server_root_password, additional, server_root_username)
 
         # Check if a task with this ID already exists and is still processing
         existing_status, _ = read_task_status(task_id)
@@ -811,10 +816,10 @@ def install():
         write_task_status(task_id, TASK_STATUS_PROCESSING, f"Starting installation of '{script_name}' on {server_ip}...\n")
 
         # Start the installation in a background thread
-        logger.info(f"Starting installation task {task_id} for '{script_name}' on {server_ip}")
+        logger.info(f"Starting installation task {task_id} for '{script_name}' on {server_ip} as {server_root_username}")
         thread = threading.Thread(
             target=execute_script_via_ssh_async,
-            args=(task_id, server_ip, server_root_password, script_name, additional),
+            args=(task_id, server_ip, server_root_password, script_name, additional, SSH_DEFAULT_PORT, server_root_username),
             daemon=True
         )
         thread.start()
@@ -1137,7 +1142,7 @@ def index():
             '/health': 'Health check endpoint',
             '/api/scripts_list': 'List all available installation scripts (supports ?lang=ru|en)',
             '/api/script/<script_name>': 'Get information about a single script by script_name (supports ?lang=ru|en)',
-            '/api/install': 'Start an installation script in background (POST: script_name, server_ip, server_root_password, additional) - returns task_id',
+            '/api/install': 'Start an installation script in background (POST: script_name, server_ip, server_root_password, server_root_username, additional) - returns task_id',
             '/api/status/<task_id>': 'Get installation task status and result (processing, completed, error)',
             '/api/protection/status': 'Get protection/rate limiting status and configuration',
             '/api/protection/blocked': 'List all currently blocked IP addresses',

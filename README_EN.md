@@ -141,7 +141,7 @@ API information and list of available endpoints.
     "/health": "Health check endpoint",
     "/api/scripts_list": "List all available installation scripts (supports ?lang=ru|en)",
     "/api/script/<script_name>": "Get information about a single script by script_name (supports ?lang=ru|en)",
-    "/api/install": "Execute an installation script on a remote server via SSH (POST: script_name, server_ip, server_root_password, additional)"
+    "/api/install": "Execute an installation script on a remote server via SSH (POST: script_name, server_ip, server_root_password, server_root_username, additional)"
   }
 }
 ```
@@ -237,6 +237,7 @@ X-API-Key: your_api_key (if API_KEY is set)
 |-------|------|----------|-------------|
 | `script_name` | string | Yes | Name of the script to execute |
 | `server_ip` | string | Yes | IP address of the remote server |
+| `server_root_username` | string | No | SSH username (default: `root`) |
 | `server_root_password` | string | Yes | Root password for SSH |
 | `additional` | string | No | Additional parameters for the script (e.g., domain name) |
 
@@ -248,6 +249,7 @@ curl -X POST http://localhost:5000/api/install \
   -d '{
     "script_name": "pocketbase",
     "server_ip": "192.168.1.100",
+    "server_root_username": "root",
     "server_root_password": "your_password",
     "additional": "example.com"
   }'
