@@ -86,7 +86,7 @@ rate_limiter = RateLimiter(
 )
 
 
-def generate_task_id(script_name, server_ip, server_root_password, additional='', server_root_username='root'):
+def generate_task_id(script_name, server_ip, server_root_password, additional='', server_root_username='root', server_ssh_port=SSH_DEFAULT_PORT):
     """
     Generate a unique task ID based on MD5 hash of all input parameters.
 
@@ -96,11 +96,12 @@ def generate_task_id(script_name, server_ip, server_root_password, additional=''
         server_root_username: Username for SSH authentication
         server_root_password: Root password for SSH authentication
         additional: Additional parameters to pass to the script
+        server_ssh_port: SSH port
 
     Returns:
         str: MD5 hash string to be used as task_id
     """
-    data = f"{script_name}:{server_ip}:{server_root_username}:{server_root_password}:{additional}"
+    data = f"{script_name}:{server_ip}:{server_root_username}:{server_root_password}:{additional}:{server_ssh_port}"
     return hashlib.md5(data.encode('utf-8')).hexdigest()
 
 
@@ -734,6 +735,7 @@ def install():
         server_ip: IP address of the remote server (required)
         server_root_username: Username for SSH authentication (optional, default: root)
         server_root_password: Root password for SSH authentication (required)
+        server_ssh_port: SSH port (optional, default: 22)
         additional: Additional parameters to pass to the script (optional)
 
     Returns:
@@ -781,7 +783,24 @@ def install():
         server_ip = data['server_ip']
         server_root_username = data.get('server_root_username') or 'root'
         server_root_password = data['server_root_password']
+        server_ssh_port = data.get('server_ssh_port', SSH_DEFAULT_PORT)
         additional = data.get('additional', '')
+
+        try:
+            server_ssh_port = int(server_ssh_port)
+        except (TypeError, ValueError):
+            return jsonify({
+                'success': False,
+                'error': 'Invalid server_ssh_port format. Please provide a valid port number.',
+                'task_id': None
+            }), 400
+
+        if not 1 <= server_ssh_port <= 65535:
+            return jsonify({
+                'success': False,
+                'error': 'Invalid server_ssh_port value. Port must be between 1 and 65535.',
+                'task_id': None
+            }), 400
 
         # Validate script_name format (basic security check)
         if not script_name.replace('-', '').replace('_', '').isalnum():
@@ -801,7 +820,14 @@ def install():
             }), 400
 
         # Generate task ID based on all input parameters
-        task_id = generate_task_id(script_name, server_ip, server_root_password, additional, server_root_username)
+        task_id = generate_task_id(
+            script_name,
+            server_ip,
+            server_root_password,
+            additional,
+            server_root_username,
+            server_ssh_port
+        )
 
         # Check if a task with this ID already exists and is still processing
         existing_status, _ = read_task_status(task_id)
@@ -816,10 +842,10 @@ def install():
         write_task_status(task_id, TASK_STATUS_PROCESSING, f"Starting installation of '{script_name}' on {server_ip}...\n")
 
         # Start the installation in a background thread
-        logger.info(f"Starting installation task {task_id} for '{script_name}' on {server_ip} as {server_root_username}")
+        logger.info(f"Starting installation task {task_id} for '{script_name}' on {server_ip}:{server_ssh_port} as {server_root_username}")
         thread = threading.Thread(
             target=execute_script_via_ssh_async,
-            args=(task_id, server_ip, server_root_password, script_name, additional, SSH_DEFAULT_PORT, server_root_username),
+            args=(task_id, server_ip, server_root_password, script_name, additional, server_ssh_port, server_root_username),
             daemon=True
         )
         thread.start()
@@ -1142,7 +1168,7 @@ def index():
             '/health': 'Health check endpoint',
             '/api/scripts_list': 'List all available installation scripts (supports ?lang=ru|en)',
             '/api/script/<script_name>': 'Get information about a single script by script_name (supports ?lang=ru|en)',
-            '/api/install': 'Start an installation script in background (POST: script_name, server_ip, server_root_password, server_root_username, additional) - returns task_id',
+            '/api/install': 'Start an installation script in background (POST: script_name, server_ip, server_root_password, server_root_username, server_ssh_port, additional) - returns task_id',
             '/api/status/<task_id>': 'Get installation task status and result (processing, completed, error)',
             '/api/protection/status': 'Get protection/rate limiting status and configuration',
             '/api/protection/blocked': 'List all currently blocked IP addresses',

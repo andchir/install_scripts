@@ -171,7 +171,7 @@ PROTECTION_ENABLED=false
     "/health": "Health check endpoint",
     "/api/scripts_list": "List all available installation scripts (supports ?lang=ru|en)",
     "/api/script/<script_name>": "Get information about a single script by script_name (supports ?lang=ru|en)",
-    "/api/install": "Execute an installation script on a remote server via SSH (POST: script_name, server_ip, server_root_password, server_root_username, additional)",
+    "/api/install": "Execute an installation script on a remote server via SSH (POST: script_name, server_ip, server_root_password, server_root_username, server_ssh_port, additional)",
     "/api/protection/status": "Get protection/rate limiting status and configuration",
     "/api/protection/blocked": "List all currently blocked IP addresses",
     "/api/protection/block": "Manually block an IP address (POST: ip, reason, permanent, duration_hours)",
@@ -274,6 +274,7 @@ X-API-Key: your_api_key (если API_KEY задан)
 | `server_ip` | string | Да | IP-адрес удалённого сервера |
 | `server_root_username` | string | Нет | Имя пользователя для SSH (по умолчанию `root`) |
 | `server_root_password` | string | Да | Пароль root для SSH |
+| `server_ssh_port` | integer | Нет | SSH-порт (по умолчанию `22`) |
 | `additional` | string | Нет | Дополнительные параметры для скрипта (например, доменное имя) |
 
 **Пример запроса (с API ключом):**
@@ -286,6 +287,7 @@ curl -X POST http://localhost:5000/api/install \
     "server_ip": "192.168.1.100",
     "server_root_username": "root",
     "server_root_password": "your_password",
+    "server_ssh_port": 22,
     "additional": "example.com"
   }'
 ```

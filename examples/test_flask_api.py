@@ -20,7 +20,7 @@ from app import (
     generate_task_id, get_task_file_path, write_task_status, read_task_status,
     delete_task_file, append_task_content, strip_ansi_codes,
     TASK_STATUS_PROCESSING, TASK_STATUS_COMPLETED, TASK_STATUS_ERROR,
-    TASKS_DIR
+    TASKS_DIR, SSH_DEFAULT_PORT
 )
 
 
@@ -319,6 +319,66 @@ class TestInstallEndpoint(unittest.TestCase):
         self.assertTrue(data['success'])
         self.assertIn('task_id', data)
 
+    @patch('app.threading.Thread')
+    def test_install_endpoint_uses_default_ssh_port(self, mock_thread_class):
+        """Test that /api/install uses default SSH port when server_ssh_port is omitted."""
+        mock_thread = MagicMock()
+        mock_thread_class.return_value = mock_thread
+
+        response = self.client.post('/api/install',
+                                    data=json.dumps({
+                                        'script_name': 'test-script',
+                                        'server_ip': '192.168.1.1',
+                                        'server_root_password': 'password'
+                                    }),
+                                    content_type='application/json')
+
+        self.assertEqual(response.status_code, 200)
+        _, kwargs = mock_thread_class.call_args
+        self.assertEqual(kwargs['args'][5], SSH_DEFAULT_PORT)
+        mock_thread.start.assert_called_once()
+
+    @patch('app.threading.Thread')
+    def test_install_endpoint_accepts_server_ssh_port(self, mock_thread_class):
+        """Test that /api/install accepts optional server_ssh_port."""
+        mock_thread = MagicMock()
+        mock_thread_class.return_value = mock_thread
+
+        response = self.client.post('/api/install',
+                                    data=json.dumps({
+                                        'script_name': 'test-script',
+                                        'server_ip': '192.168.1.1',
+                                        'server_root_password': 'password',
+                                        'server_ssh_port': 2222
+                                    }),
+                                    content_type='application/json')
+
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data['success'])
+        _, kwargs = mock_thread_class.call_args
+        self.assertEqual(kwargs['args'][5], 2222)
+        mock_thread.start.assert_called_once()
+
+    def test_install_endpoint_rejects_invalid_server_ssh_port(self):
+        """Test that /api/install rejects invalid server_ssh_port values."""
+        invalid_ports = ['invalid', 0, 65536]
+
+        for port in invalid_ports:
+            response = self.client.post('/api/install',
+                                        data=json.dumps({
+                                            'script_name': 'test-script',
+                                            'server_ip': '192.168.1.1',
+                                            'server_root_password': 'password',
+                                            'server_ssh_port': port
+                                        }),
+                                        content_type='application/json')
+
+            self.assertEqual(response.status_code, 400)
+            data = response.get_json()
+            self.assertFalse(data['success'])
+            self.assertIn('server_ssh_port', data['error'])
+
     def test_install_endpoint_same_params_same_task_id(self):
         """Test that the same parameters generate the same task_id."""
         params = {
@@ -509,6 +569,12 @@ class TestTaskHelperFunctions(unittest.TestCase):
         """Test that different SSH usernames produce different task IDs."""
         task_id1 = generate_task_id('script', '192.168.1.1', 'password', 'extra', 'root')
         task_id2 = generate_task_id('script', '192.168.1.1', 'password', 'extra', 'ubuntu')
+        self.assertNotEqual(task_id1, task_id2)
+
+    def test_generate_task_id_uses_ssh_port(self):
+        """Test that different SSH ports produce different task IDs."""
+        task_id1 = generate_task_id('script', '192.168.1.1', 'password', 'extra', 'root', 22)
+        task_id2 = generate_task_id('script', '192.168.1.1', 'password', 'extra', 'root', 2222)
         self.assertNotEqual(task_id1, task_id2)
 
     def test_generate_task_id_format(self):

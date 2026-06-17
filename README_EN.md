@@ -141,7 +141,7 @@ API information and list of available endpoints.
     "/health": "Health check endpoint",
     "/api/scripts_list": "List all available installation scripts (supports ?lang=ru|en)",
     "/api/script/<script_name>": "Get information about a single script by script_name (supports ?lang=ru|en)",
-    "/api/install": "Execute an installation script on a remote server via SSH (POST: script_name, server_ip, server_root_password, server_root_username, additional)"
+    "/api/install": "Execute an installation script on a remote server via SSH (POST: script_name, server_ip, server_root_password, server_root_username, server_ssh_port, additional)"
   }
 }
 ```
@@ -239,6 +239,7 @@ X-API-Key: your_api_key (if API_KEY is set)
 | `server_ip` | string | Yes | IP address of the remote server |
 | `server_root_username` | string | No | SSH username (default: `root`) |
 | `server_root_password` | string | Yes | Root password for SSH |
+| `server_ssh_port` | integer | No | SSH port (default: `22`) |
 | `additional` | string | No | Additional parameters for the script (e.g., domain name) |
 
 **Example Request (with API key):**
@@ -251,6 +252,7 @@ curl -X POST http://localhost:5000/api/install \
     "server_ip": "192.168.1.100",
     "server_root_username": "root",
     "server_root_password": "your_password",
+    "server_ssh_port": 22,
     "additional": "example.com"
   }'
 ```
